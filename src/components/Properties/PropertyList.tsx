@@ -20,7 +20,9 @@ export const PropertyList: React.FC = () => {
   const { properties, fetchProperties, deleteProperty } = useDataStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
-  const [showAddModal, setShowAddModal] = useState(false);
+  const handleAddProperty = () => {
+    // TODO: open add property modal
+  };
 
   useEffect(() => {
     fetchProperties();
@@ -134,8 +136,8 @@ export const PropertyList: React.FC = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Propriétés</h1>
         {(user?.role === 'admin' || user?.role === 'client') && (
-          <button 
-            onClick={() => setShowAddModal(true)}
+          <button
+            onClick={handleAddProperty}
             className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center space-x-2"
           >
             <Plus className="w-4 h-4" />
@@ -193,8 +195,8 @@ export const PropertyList: React.FC = () => {
             }
           </p>
           {(user?.role === 'admin' || user?.role === 'client') && (
-            <button 
-              onClick={() => setShowAddModal(true)}
+            <button
+              onClick={handleAddProperty}
               className="bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 transition-colors"
             >
               Ajouter une propriété
