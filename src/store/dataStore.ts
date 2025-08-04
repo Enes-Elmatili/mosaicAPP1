@@ -19,7 +19,7 @@ interface DataState {
   deleteProperty: (id: string) => Promise<void>;
   createBooking: (booking: Omit<Booking, 'id' | 'createdAt'>) => Promise<void>;
   updateBookingStatus: (id: string, status: Booking['status']) => Promise<void>;
-  addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => void;
+  addNotification: (notification: Omit<Notification, 'id' | 'createdAt' | 'isRead'>) => void;
   markNotificationAsRead: (id: string) => void;
 }
 
@@ -222,6 +222,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     const notification: Notification = {
       ...notificationData,
       id: Date.now().toString(),
+      isRead: false,
       createdAt: new Date(),
     };
     
