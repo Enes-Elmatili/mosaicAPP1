@@ -174,7 +174,11 @@ export const PropertyList: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-2 text-sm text-gray-600">
-            <span>{filteredProperties.length} propriété(s) trouvée(s)</span>
+            <span>
+              {filteredProperties.length === 1
+                ? '1 propriété trouvée'
+                : `${filteredProperties.length} propriétés trouvées`}
+            </span>
           </div>
         </div>
       </div>

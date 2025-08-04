@@ -143,7 +143,7 @@ export const LoginForm: React.FC = () => {
             </p>
           </div>
 
-          {/* Demo credentials */}
+          {/* Identifiants de démonstration */}
           <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <h4 className="text-sm font-medium text-blue-900 mb-2">Comptes de démonstration :</h4>
             <div className="text-xs text-blue-700 space-y-1">
