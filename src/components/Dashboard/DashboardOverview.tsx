@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
-import { 
-  TrendingUp, 
-  Users, 
-  Building, 
+import {
+  TrendingUp,
+  Users,
+  Building,
   Calendar,
-  Eye,
   MapPin,
-  Star
+  Star,
+  type LucideIcon
 } from 'lucide-react';
 import { useDataStore } from '../../store/dataStore';
 import { useAuthStore } from '../../store/authStore';
@@ -30,7 +30,15 @@ export const DashboardOverview: React.FC = () => {
     );
   }
 
-  const StatCard = ({ title, value, icon: Icon, trend, color = 'primary' }: any) => (
+  interface StatCardProps {
+    title: string;
+    value: number;
+    icon: LucideIcon;
+    trend?: number;
+    color?: string;
+  }
+
+  const StatCard = ({ title, value, icon: Icon, trend, color = 'primary' }: StatCardProps) => (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between">
         <div>

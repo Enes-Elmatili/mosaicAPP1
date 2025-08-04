@@ -37,6 +37,8 @@ const mockUsers: User[] = [
   },
 ];
 
+const isBrowser = typeof window !== 'undefined';
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
@@ -52,7 +54,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     
     if (user && password === 'password') {
       set({ user, isAuthenticated: true, isLoading: false });
-      localStorage.setItem('mosaic_user', JSON.stringify(user));
+      if (isBrowser) {
+        localStorage.setItem('mosaic_user', JSON.stringify(user));
+      }
     } else {
       set({ isLoading: false });
       throw new Error('Email ou mot de passe incorrect');
@@ -61,7 +65,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: () => {
     set({ user: null, isAuthenticated: false });
-    localStorage.removeItem('mosaic_user');
+    if (isBrowser) {
+      localStorage.removeItem('mosaic_user');
+    }
   },
 
   register: async (userData) => {
@@ -83,7 +89,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     
     mockUsers.push(newUser);
     set({ user: newUser, isAuthenticated: true, isLoading: false });
-    localStorage.setItem('mosaic_user', JSON.stringify(newUser));
+    if (isBrowser) {
+      localStorage.setItem('mosaic_user', JSON.stringify(newUser));
+    }
   },
 
   updateProfile: async (userData) => {
@@ -94,7 +102,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set((state) => {
       if (state.user) {
         const updatedUser = { ...state.user, ...userData };
-        localStorage.setItem('mosaic_user', JSON.stringify(updatedUser));
+        if (isBrowser) {
+          localStorage.setItem('mosaic_user', JSON.stringify(updatedUser));
+        }
         return { user: updatedUser, isLoading: false };
       }
       return { isLoading: false };
@@ -102,9 +112,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 }));
 
-// Initialiser l'état depuis localStorage
-const savedUser = localStorage.getItem('mosaic_user');
-if (savedUser) {
-  const user = JSON.parse(savedUser);
-  useAuthStore.setState({ user, isAuthenticated: true });
+// Initialiser l'état depuis localStorage si disponible
+if (isBrowser) {
+  const savedUser = localStorage.getItem('mosaic_user');
+  if (savedUser) {
+    const user = JSON.parse(savedUser);
+    useAuthStore.setState({ user, isAuthenticated: true });
+  }
 }
