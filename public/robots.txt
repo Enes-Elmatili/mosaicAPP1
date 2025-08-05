@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Host: www.mosaicpropertymanagements.com
+Sitemap: https://www.mosaicpropertymanagements.com/sitemap.xml
