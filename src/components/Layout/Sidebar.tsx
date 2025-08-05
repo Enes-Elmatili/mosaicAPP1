@@ -9,9 +9,16 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-const menuItems = {
+interface MenuItem {
+  id: string;
+  label: string;
+  icon: React.FC<any>;
+  requiredPermission: string;
+}
+
+const menuItems: Record<string, MenuItem[]> = {
   admin: [
-    { id: 'dashboard', label: 'Tableau de bord', icon: Home },
+    { id: 'dashboard', label: 'Tableau de bord', icon: Home, requiredPermission: 'dashboard.read' },
     { id: 'properties', label: 'Propriétés', icon: Building },
     { id: 'bookings', label: 'Réservations', icon: Calendar },
     { id: 'users', label: 'Utilisateurs', icon: Users },
@@ -36,7 +43,7 @@ const menuItems = {
     { id: 'settings', label: 'Paramètres', icon: Settings },
   ],
   prestataire: [
-    { id: 'dashboard', label: 'Accueil', icon: Home },
+    { id: 'dashboard', label: 'Accueil', icon: Home, requiredPermission: 'dashboard.read' },
     { id: 'services', label: 'Mes services', icon: Tool },
     { id: 'bookings', label: 'Interventions', icon: Calendar },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
@@ -50,8 +57,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen, 
   onClose 
 }) => {
-  const { user } = useAuthStore();
-  const items = menuItems[user?.role || 'client'];
+  const { user } = useAuth();
+  const items = menuItems[user?.roles[0] || 'client'] || [];
+  // filter by permission
+  const filtered = items.filter((item) =>
+    user?.effectivePermissions.includes(item.requiredPermission)
+  );
 
   return (
     <>
@@ -84,7 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <nav className="p-4 space-y-1">
-          {items.map((item) => {
+        {filtered.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             
