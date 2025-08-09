@@ -1,0 +1,87 @@
+[
+  {
+    "id": 1,
+    "name": "Plomberie",
+    "subcategories": [
+      { "id": 1, "name": "WC / Chasse d’eau", "slug": "wc-chasse-eau" },
+      { "id": 2, "name": "Fuite d’eau", "slug": "fuite-eau" },
+      { "id": 3, "name": "Débouchage évier/lavabo", "slug": "debouchage-evier-lavabo" },
+      { "id": 4, "name": "Robinetterie / Mitigeur", "slug": "robinetterie-mitigeur" },
+      { "id": 5, "name": "Chauffe-eau (installation)", "slug": "chauffe-eau-installation" }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Électricité",
+    "subcategories": [
+      { "id": 1, "name": "Prise / Interrupteur", "slug": "prise-interrupteur" },
+      { "id": 2, "name": "Éclairage / Plafonnier", "slug": "eclairage-plafonnier" },
+      { "id": 3, "name": "Tableau / Disjoncteur", "slug": "tableau-disjoncteur" },
+      { "id": 4, "name": "Courant faible (RJ45 / TV)", "slug": "courant-faible-rj45-tv" },
+      { "id": 5, "name": "Panne générale / Diagnostic", "slug": "panne-generale-diagnostic" }
+    ]
+  },
+  {
+    "id": 3,
+    "name": "Serrurerie",
+    "subcategories": [
+      { "id": 1, "name": "Ouverture de porte", "slug": "ouverture-porte" },
+      { "id": 2, "name": "Changement de cylindre", "slug": "changement-cylindre" },
+      { "id": 3, "name": "Serrure multipoints", "slug": "serrure-multipoints" },
+      { "id": 4, "name": "Réglage porte / charnières", "slug": "reglage-porte-charnieres" }
+    ]
+  },
+  {
+    "id": 4,
+    "name": "Électroménager",
+    "subcategories": [
+      { "id": 1, "name": "Lave-linge", "slug": "lave-linge" },
+      { "id": 2, "name": "Lave-vaisselle", "slug": "lave-vaisselle" },
+      { "id": 3, "name": "Réfrigérateur / Congélateur", "slug": "refrigerateur-congelateur" },
+      { "id": 4, "name": "Four / Plaque de cuisson", "slug": "four-plaque-cuisson" },
+      { "id": 5, "name": "Hotte aspirante", "slug": "hotte-aspirante" }
+    ]
+  },
+  {
+    "id": 5,
+    "name": "Chauffage / Climatisation",
+    "subcategories": [
+      { "id": 1, "name": "Clim — entretien", "slug": "clim-entretien" },
+      { "id": 2, "name": "Clim — panne / diagnostic", "slug": "clim-panne-diagnostic" },
+      { "id": 3, "name": "Chaudière — entretien", "slug": "chaudiere-entretien" },
+      { "id": 4, "name": "Thermostat / régulation", "slug": "thermostat-regulation" },
+      { "id": 5, "name": "Chauffe-eau — maintenance", "slug": "chauffe-eau-maintenance" }
+    ]
+  },
+  {
+    "id": 6,
+    "name": "Peinture & Menuiserie",
+    "subcategories": [
+      { "id": 1, "name": "Retouches peinture", "slug": "retouches-peinture" },
+      { "id": 2, "name": "Peinture d’une pièce", "slug": "peinture-piece" },
+      { "id": 3, "name": "Cloison / Placoplatre", "slug": "cloison-placoplatre" },
+      { "id": 4, "name": "Porte / Fenêtre — réglage", "slug": "porte-fenetre-reglage" },
+      { "id": 5, "name": "Pose étagère / meuble", "slug": "pose-etagere-meuble" }
+    ]
+  },
+  {
+    "id": 7,
+    "name": "Vitrerie & Ouvertures",
+    "subcategories": [
+      { "id": 1, "name": "Vitrage cassé / remplacement", "slug": "vitrage-casse-remplacement" },
+      { "id": 2, "name": "Baie coulissante — réglage", "slug": "baie-coulissante-reglage" },
+      { "id": 3, "name": "Volet roulant — panne", "slug": "volet-roulant-panne" },
+      { "id": 4, "name": "Joints / Moustiquaire", "slug": "joints-moustiquaire" }
+    ]
+  },
+  {
+    "id": 8,
+    "name": "Nettoyage & Nuisibles",
+    "subcategories": [
+      { "id": 1, "name": "Nettoyage fin de chantier", "slug": "nettoyage-fin-de-chantier" },
+      { "id": 2, "name": "Détartrage salle de bain", "slug": "detartrage-salle-de-bain" },
+      { "id": 3, "name": "Désinsectisation (cafards…)", "slug": "desinsectisation" },
+      { "id": 4, "name": "Dératisation", "slug": "deratisation" }
+    ]
+  }
+]

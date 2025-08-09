@@ -1,3 +1,18 @@
+/* Importation de la police Inter pour une typographie élégante */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --font-sans: 'Inter', sans-serif;
+}
+
+/* Styles globaux d'adaptation à l'esprit Airbnb */
+body {
+  @apply bg-white font-sans text-gray-800 antialiased;
+}
+button {
+  @apply bg-primary text-white px-4 py-2 rounded-full hover:bg-opacity-90 transition;
+}

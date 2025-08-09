@@ -1,0 +1,35 @@
+version: '3.9'
+services:
+  api:
+    image: node:20
+    working_dir: /app
+    command: bash -lc "node backend/server.js"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app
+      - ./uploads:/app/uploads
+      - ./prisma/dev.db:/app/prisma/dev.db
+    environment:
+      - NODE_ENV=development
+      - MASTER_KEY=dev-master-key
+      - JWT_SECRET=dev_jwt_secret
+      - LOCAL_UPLOAD_DIR=uploads
+      - PUBLIC_UPLOAD_BASE=/uploads
+      - ALLOWED_ORIGINS=http://localhost:5173
+
+  web:
+    image: node:20
+    working_dir: /app
+    command: bash -lc "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./:/app
+    environment:
+      - VITE_API_URL=http://localhost:3000/api
+      - VITE_MASTER_KEY=dev-master-key
+      - VITE_ENABLE_PWA=true
+    depends_on:
+      - api
+

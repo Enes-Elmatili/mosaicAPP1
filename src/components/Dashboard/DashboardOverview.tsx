@@ -16,11 +16,15 @@ const COLORS = ['#3B82F6', '#14B8A6', '#F97316', '#EF4444'];
 
 export const DashboardOverview: React.FC = () => {
   const { user } = useAuthStore();
-  const { dashboard, properties, bookings, fetchDashboard } = useDataStore();
+  const { dashboard, properties, bookings, services, fetchProperties, fetchBookings, fetchServices, fetchDashboard } = useDataStore();
 
   useEffect(() => {
+    // Initialisation des données du dashboard
+    fetchProperties();
+    fetchBookings();
+    fetchServices();
     fetchDashboard();
-  }, [fetchDashboard]);
+  }, [fetchProperties, fetchBookings, fetchServices, fetchDashboard]);
 
   if (!dashboard) {
     return (
@@ -228,7 +232,7 @@ export const DashboardOverview: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold">Services disponibles</h3>
-              <p className="text-2xl font-bold mt-2">12</p>
+              <p className="text-2xl font-bold mt-2">{services.length}</p>
             </div>
             <Star className="w-8 h-8 opacity-80" />
           </div>

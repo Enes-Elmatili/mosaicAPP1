@@ -1,0 +1,9 @@
+{
+  "error.invalid_mime": "Type de fichier invalide",
+  "error.file_too_large": "Fichier trop volumineux",
+  "error.no_file": "Aucun fichier téléchargé",
+  "error.forbidden": "Accès interdit",
+  "error.photo_limit_exceeded": "Nombre maximal de photos atteint",
+  "error.photo_not_found": "Photo introuvable",
+  "error.rate_limit_exceeded": "Nombre de requêtes dépassé"
+}

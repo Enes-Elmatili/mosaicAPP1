@@ -7,6 +7,12 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model Role {
   id          String           @id @default(cuid())
   name        String           @unique
@@ -40,4 +46,119 @@ model UserRole {
   role   Role   @relation(fields: [roleId], references: [id])
 
   @@id([userId, roleId])
+}
+
+/// Catégories et sous-catégories pour les demandes de service
+model Category {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  subcategories Subcategory[]
+}
+
+model Subcategory {
+  id         Int      @id @default(autoincrement())
+  categoryId Int
+  name       String
+  slug       String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([categoryId, slug])
+}
+
+/// Demandes de service créées par les clients
+model Request {
+  id                  Int             @id @default(autoincrement())
+  clientId            String
+  categoryId          Int
+  subcategoryId       Int
+  propertyId          String?         // ID of the property concerned
+  serviceType         String          // Type of maintenance service requested
+  description         String
+  clientInfo          String?         // Optional client contact or information
+  urgent              Boolean         @default(false) // Emergency flag
+  providerId          String          // Assigned provider ID
+  providerName        String          // Assigned provider name
+  providerDistanceKm  Float           // Distance to provider in km
+  contractUrl         String?         // URL to generated contract PDF
+  address             String
+  lat                 Float
+  lng                 Float
+  geohash             String
+  preferredTimeStart  DateTime?
+  preferredTimeEnd    DateTime?
+  status              String          @default("PUBLISHED")
+  createdAt           DateTime        @default(now())
+  photos              RequestPhoto[]
+
+  @@index([geohash(7)], name: "idx_request_geohash")
+  @@index([clientId], name: "idx_request_clientId")
+}
+
+/// Photos uploadées pour une demande
+model RequestPhoto {
+  id        Int     @id @default(autoincrement())
+  request   Request @relation(fields: [requestId], references: [id])
+  requestId Int
+  url       String
+  width     Int
+  height    Int
+  size      Int
+  mime      String
+  createdAt DateTime @default(now())
+}
+
+/// Maintenance service request for clients
+/// Possible statuses for a maintenance request (pending, assigned, in_progress, done, paid, closed)
+
+/// Maintenance service request for clients
+model MaintenanceRequest {
+  id                 Int       @id @default(autoincrement())
+  clientId           String
+  propertyId         String
+  serviceType        String
+  description        String
+  clientInfo         String?
+  urgent             Boolean   @default(false)
+  providerId         String
+  providerName       String
+  providerDistanceKm Float
+  contractUrl        String?
+  status             String        @default("pending")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // New normalized fields (Phase 2)
+  priority           Priority?
+  categoryId         String?
+  subcategoryId      String?
+  photos             Json       @default("[]")
+
+  @@index([clientId], name: "idx_maintenance_clientId")
+
+  /// History of status changes for this request
+  statusHistory      StatusHistory[]
+}
+
+/// Record of each status change on a maintenance request
+model StatusHistory {
+  id         Int            @id @default(autoincrement())
+  request    MaintenanceRequest @relation(fields: [requestId], references: [id])
+  requestId  Int
+  status     String
+  timestamp  DateTime       @default(now())
+
+  @@index([requestId], name: "idx_statushistory_requestId")
+}
+
+/// Alerts generated for stalled maintenance requests
+model Alert {
+  id         Int      @id @default(autoincrement())
+  request    MaintenanceRequest @relation(fields: [requestId], references: [id])
+  requestId  Int
+  type       String   // e.g. "pending_overdue", "in_progress_overdue"
+  timestamp  DateTime @default(now())
+  resolved   Boolean  @default(false)
+  message    String   // Human-readable alert message
+
+  @@index([requestId], name: "idx_alert_requestId")
 }

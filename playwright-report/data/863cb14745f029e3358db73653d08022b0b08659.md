@@ -1,0 +1,52 @@
+# Page snapshot
+
+```yaml
+- banner:
+  - navigation:
+    - link "MOSAIC":
+      - /url: /
+    - link "Accueil":
+      - /url: /
+    - link "Rechercher":
+      - /url: /rental/search
+    - link "Offres & Abos":
+      - /url: /offers
+    - link "Tarifs":
+      - /url: /pricing
+    - link "Connexion":
+      - /url: /login
+    - link "Création de compte":
+      - /url: /signup
+- main:
+  - main:
+    - heading "MOSAIC" [level=1]
+    - paragraph: Gérez vos demandes en 2 clics.
+    - link "Créer une demande":
+      - /url: /app/tenant/requests/new
+    - heading "Actions rapides" [level=2]
+    - list:
+      - listitem:
+        - link "+ Nouvelle demande":
+          - /url: /app/tenant/requests/new
+      - listitem:
+        - link "Mes demandes":
+          - /url: /app/tenant/requests
+      - listitem:
+        - link "Paramètres":
+          - /url: /settings
+    - heading "Dernières demandes" [level=2]
+    - list:
+      - listitem:
+        - link "Demande A open 8/5/2025":
+          - /url: /app/tenant/requests/1
+          - strong: Demande A
+          - text: open
+          - time: 8/5/2025
+      - listitem:
+        - link "Demande B in progress 8/4/2025":
+          - /url: /app/tenant/requests/2
+          - strong: Demande B
+          - text: in progress
+          - time: 8/4/2025
+- contentinfo: © 2025 MOSAIC. Tous droits réservés.
+```

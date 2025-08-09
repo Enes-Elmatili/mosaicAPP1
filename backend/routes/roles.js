@@ -60,3 +60,4 @@ router.post('/:id/permissions', validate(updateRolePermissionsSchema), async (re
 });
 
 module.exports = router;
+

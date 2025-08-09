@@ -1,6 +1,7 @@
 import React from 'react';
 import { Home, Building, Calendar, Users, Settings, BarChart3, PenTool as Tool, MessageSquare, X } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -19,7 +20,7 @@ interface MenuItem {
 const menuItems: Record<string, MenuItem[]> = {
   admin: [
     { id: 'dashboard', label: 'Tableau de bord', icon: Home, requiredPermission: 'dashboard.read' },
-    { id: 'properties', label: 'Propriétés', icon: Building },
+    { id: 'properties', label: 'Propriétés', icon: Building, requiredPermission: 'properties.read' },
     { id: 'bookings', label: 'Réservations', icon: Calendar },
     { id: 'users', label: 'Utilisateurs', icon: Users },
     { id: 'services', label: 'Services', icon: Tool },

@@ -25,32 +25,30 @@ let useAuthStore: typeof import('./authStore').useAuthStore;
 
 beforeAll(async () => {
   useAuthStore = (await import('./authStore')).useAuthStore;
+  // Stub master key for testing
+  vi.stubEnv('VITE_MASTER_KEY', 'valid_master_key');
 });
 
-describe('authStore login', () => {
+describe('authStore login with master key', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     localStorage.clear();
-    useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false });
+    useAuthStore.setState({ masterKey: null, isAuthenticated: false, isLoading: false });
   });
 
   afterEach(() => {
-    vi.useRealTimers();
   });
 
-  it('authenticates valid user', async () => {
-    const loginPromise = useAuthStore.getState().login('admin@mosaic.fr', 'password');
-    await vi.runAllTimersAsync();
+  it('authenticates valid master key', async () => {
+    const loginPromise = useAuthStore.getState().login('valid_master_key');
     await loginPromise;
-    const { isAuthenticated, user } = useAuthStore.getState();
+    const { isAuthenticated, masterKey } = useAuthStore.getState();
     expect(isAuthenticated).toBe(true);
-    expect(user?.email).toBe('admin@mosaic.fr');
+    expect(masterKey).toBe('valid_master_key');
+    expect(localStorage.getItem('mosaic_master_key')).toBe('valid_master_key');
   });
 
-  it('rejects invalid password', async () => {
-    const loginPromise = useAuthStore.getState().login('admin@mosaic.fr', 'wrong');
-    const assertion = expect(loginPromise).rejects.toThrow('Email ou mot de passe incorrect');
-    await vi.runAllTimersAsync();
-    await assertion;
+  it('rejects invalid master key', async () => {
+    const loginPromise = useAuthStore.getState().login('bad_key');
+    await expect(loginPromise).rejects.toThrow('Master key invalide');
   });
 });

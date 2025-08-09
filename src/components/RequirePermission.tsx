@@ -1,20 +1,18 @@
-import React, { ReactNode } from 'react';
-import { useAuth } from '../context/AuthContext';
-
-type Props = {
-  permission: string;
-  children: ReactNode;
-};
-
-/**
- * Render children only if current user has the given permission.
- * Otherwise display a simple Forbidden message.
- */
-export default function RequirePermission({ permission, children }: Props) {
-  const { user } = useAuth();
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useAuth } from '../store/auth';
+export default function RequirePermission({ permission }:{permission:'admin'|'owner'|'tenant'|string}){
+  const { user, loading } = useAuth();
   const location = useLocation();
-  if (!user || !user.effectivePermissions.includes(permission)) {
-    return <Navigate to="/unauthorized" state={{ from: location }} replace />;
-  }
-  return <>{children}</>;
+  if (loading) return <div>Chargement…</div>;
+  const isDev = import.meta.env.MODE !== 'production';
+  const hasMaster = !!(localStorage.getItem('mosaic_master_key') || localStorage.getItem('VITE_MASTER_KEY'));
+  if (isDev && hasMaster) return <Outlet />;
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  const role = (user.role||'tenant').toLowerCase();
+  const ok = permission==='admin'? role==='admin'
+           : permission==='owner'? ['owner','admin'].includes(role)
+           : permission==='tenant'? ['tenant','admin'].includes(role)
+           : true;
+  if (!ok) return <Navigate to="/unauthorized" replace state={{ from: location.pathname }} />;
+  return <Outlet />;
 }

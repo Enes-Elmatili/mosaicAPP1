@@ -4,3 +4,5 @@ dist/
 prisma/dev.db
 *.log
 env.local
+# local env file
+.env
