@@ -1,47 +1,121 @@
-// Service to generate contract/devis PDF for maintenance requests
-const PDFDocument = require('pdfkit');
-const fs = require('fs');
-const path = require('path');
+// backend/services/contractService.js
+import PDFDocument from "pdfkit";
+import fs from "fs";
+import fsp from "fs/promises"; // version Promises
+import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
- * Generate a PDF contract for a maintenance request and save it to /contracts.
- * @param {object} requestData - Data of the maintenance request
- * @param {object} provider - Assigned provider info
- * @param {number|string} requestId - Unique ID of the request
- * @returns {Promise<string>} - Public URL path to the generated PDF
+ * Génère un contrat PDF pour une demande donnée
+ * @param {object} requestData - Données de la demande
+ * @param {object} provider - Informations du fournisseur
+ * @param {string|number} requestId - ID unique de la demande
+ * @returns {Promise<string>} URL publique du PDF
  */
-async function generateContract(requestData, provider, requestId) {
-  const contractsDir = path.join(process.cwd(), 'contracts');
-  await fs.promises.mkdir(contractsDir, { recursive: true });
-  const filename = `contract_${requestId}.pdf`;
-  const filePath = path.join(contractsDir, filename);
-  const doc = new PDFDocument();
-  const stream = fs.createWriteStream(filePath);
-  doc.pipe(stream);
-  
-  // Header
-  doc.fontSize(18).text('Contrat de maintenance', { align: 'center' });
-  doc.moveDown();
+export async function generateContract(requestData, provider, requestId) {
+  try {
+    const contractsDir = path.join(process.cwd(), "uploads", "contracts");
+    await fsp.mkdir(contractsDir, { recursive: true });
 
-  // Request details
-  doc.fontSize(12)
-    .text(`Request ID: ${requestId}`)
-    .text(`Property ID: ${requestData.propertyId}`)
-    .text(`Service Type: ${requestData.serviceType}`)
-    .text(`Description: ${requestData.description}`)
-    .text(`Client Info: ${requestData.clientInfo || 'N/A'}`)
-    .text(`Urgent: ${requestData.urgent ? 'Yes' : 'No'}`)
-    .moveDown();
+    const filename = `contract_${requestId}.pdf`;
+    const filePath = path.join(contractsDir, filename);
 
-  // Provider details
-  doc.fontSize(12)
-    .text(`Provider: ${provider.name} (ID: ${provider.id})`)
-    .text(`Distance: ${provider.distanceKm} km`)
-    .moveDown();
+    const doc = new PDFDocument();
+    const stream = fs.createWriteStream(filePath);
+    doc.pipe(stream);
 
-  doc.end();
-  await new Promise(resolve => stream.on('finish', resolve));
-  return `/contracts/${filename}`;
+    // ---- HEADER ----
+    doc.fontSize(18).text("Contrat de maintenance", { align: "center" });
+    doc.moveDown();
+
+    // ---- Détails demande ----
+    doc.fontSize(12)
+      .text(`Request ID: ${requestId}`)
+      .text(`Property ID: ${requestData.propertyId ?? "N/A"}`)
+      .text(`Service Type: ${requestData.serviceType ?? "N/A"}`)
+      .text(`Description: ${requestData.description ?? "N/A"}`)
+      .text(`Client Info: ${requestData.clientInfo ?? "N/A"}`)
+      .text(`Urgent: ${requestData.urgent ? "Oui" : "Non"}`)
+      .moveDown();
+
+    // ---- Détails fournisseur ----
+    if (provider) {
+      doc.fontSize(12)
+        .text(`Fournisseur: ${provider.name ?? "N/A"} (ID: ${provider.id ?? "?"})`)
+        .text(`Distance: ${provider.distanceKm ?? "?"} km`)
+        .moveDown();
+    }
+
+    doc.end();
+
+    await new Promise((resolve, reject) => {
+      stream.on("finish", resolve);
+      stream.on("error", reject);
+    });
+
+    // URL publique
+    return `/api/uploads/contracts/${filename}`;
+  } catch (error) {
+    console.error("❌ Erreur génération contrat PDF:", error);
+    throw error;
+  }
 }
 
-module.exports = { generateContract };
+/**
+ * Génère une facture PDF pour une demande terminée
+ * @param {object} request - Données de la demande
+ * @param {object} contract - Contrat lié
+ * @returns {Promise<string>} URL publique du PDF
+ */
+export async function generateInvoice(request, contract) {
+  try {
+    const invoicesDir = path.join(process.cwd(), "uploads", "invoices");
+    await fsp.mkdir(invoicesDir, { recursive: true });
+
+    const filename = `invoice_${request.id}.pdf`;
+    const filePath = path.join(invoicesDir, filename);
+
+    const doc = new PDFDocument();
+    const stream = fs.createWriteStream(filePath);
+    doc.pipe(stream);
+
+    // ---- HEADER ----
+    doc.fontSize(18).text("FACTURE", { align: "center" });
+    doc.moveDown();
+
+    // ---- Détails facture ----
+    doc.fontSize(12)
+      .text(`Request ID: ${request.id}`)
+      .text(`Contrat ID: ${contract?.id ?? "N/A"}`)
+      .text(`Montant: ${request.price ?? 0} MAD`)
+      .text(`Date: ${new Date().toLocaleDateString("fr-FR")}`)
+      .moveDown();
+
+    // ---- Parties ----
+    doc.fontSize(12)
+      .text(`Client: ${request.user?.email ?? "N/A"}`)
+      .text(`Provider: ${request.provider?.name ?? "N/A"}`)
+      .moveDown();
+
+    doc.end();
+
+    await new Promise((resolve, reject) => {
+      stream.on("finish", resolve);
+      stream.on("error", reject);
+    });
+
+    return `/api/uploads/invoices/${filename}`;
+  } catch (error) {
+    console.error("❌ Erreur génération facture PDF:", error);
+    throw error;
+  }
+}
+
+export default {
+  generateContract,
+  generateInvoice,
+};

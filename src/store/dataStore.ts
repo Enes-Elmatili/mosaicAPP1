@@ -1,29 +1,47 @@
 import { create } from 'zustand';
 import { Property, Booking, Service, ServiceRequest, Notification, Dashboard } from '../types';
 
-interface DataState {
-  properties: Property[];
-  bookings: Booking[];
-  services: Service[];
-  serviceRequests: ServiceRequest[];
-  notifications: Notification[];
-  dashboard: Dashboard | null;
-  
-  // Actions
-  fetchProperties: () => Promise<void>;
-  fetchBookings: () => Promise<void>;
-  fetchServices: () => Promise<void>;
-  fetchDashboard: () => Promise<void>;
-  addProperty: (property: Omit<Property, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
-  updateProperty: (id: string, updates: Partial<Property>) => Promise<void>;
-  deleteProperty: (id: string) => Promise<void>;
-  createBooking: (booking: Omit<Booking, 'id' | 'createdAt'>) => Promise<void>;
-  updateBookingStatus: (id: string, status: Booking['status']) => Promise<void>;
-  addNotification: (notification: Omit<Notification, 'id' | 'createdAt' | 'isRead'>) => void;
-  markNotificationAsRead: (id: string) => void;
+// ======================
+// API helpers (dev/prod)
+// ======================
+const RAW_BASE = (import.meta as any).env?.VITE_API_BASE || ""; // ex: http://localhost:3001  OU "" si proxy Vite
+
+function buildUrl(path: string) {
+  const base = RAW_BASE.replace(/\/$/, "");
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const withApi = p.startsWith("/api/") ? p : `/api${p}`;
+  return `${base}${withApi}`;
 }
 
-// Mock data
+const mk = () =>
+  (typeof window === 'undefined'
+    ? ''
+    : localStorage.getItem('mosaic_master_key') ||
+      localStorage.getItem('VITE_MASTER_KEY') ||
+      '');
+
+async function apiFetch<T = any>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers || {});
+  const key = mk();
+  if (key) headers.set('x-master-key', key);
+
+  const res = await fetch(buildUrl(path), {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...Object.fromEntries(headers) },
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API ${res.status}: ${text}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+// ======================
+// Mock data (fallback)
+// ======================
 const mockProperties: Property[] = [
   {
     id: '1',
@@ -108,6 +126,31 @@ const mockServices: Service[] = [
   },
 ];
 
+// ======================
+// Store
+// ======================
+interface DataState {
+  properties: Property[];
+  bookings: Booking[];
+  services: Service[];
+  serviceRequests: ServiceRequest[];
+  notifications: Notification[];
+  dashboard: Dashboard | null;
+
+  // Actions
+  fetchProperties: () => Promise<void>;
+  fetchBookings: () => Promise<void>;
+  fetchServices: () => Promise<void>;
+  fetchDashboard: () => Promise<void>;
+  addProperty: (property: Omit<Property, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateProperty: (id: string, updates: Partial<Property>) => Promise<void>;
+  deleteProperty: (id: string) => Promise<void>;
+  createBooking: (booking: Omit<Booking, 'id' | 'createdAt'>) => Promise<void>;
+  updateBookingStatus: (id: string, status: Booking['status']) => Promise<void>;
+  addNotification: (notification: Omit<Notification, 'id' | 'createdAt' | 'isRead'>) => void;
+  markNotificationAsRead: (id: string) => void;
+}
+
 export const useDataStore = create<DataState>((set, get) => ({
   properties: mockProperties,
   bookings: mockBookings,
@@ -116,106 +159,137 @@ export const useDataStore = create<DataState>((set, get) => ({
   notifications: [],
   dashboard: null,
 
+  // ===== Queries =====
   fetchProperties: async () => {
-    // Simulation API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    set({ properties: mockProperties });
+    try {
+      const data = await apiFetch<Property[]>('/properties');
+      set({ properties: data.map(normalizeProperty) });
+    } catch {
+      // fallback mock
+      set({ properties: mockProperties });
+    }
   },
 
   fetchBookings: async () => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    set({ bookings: mockBookings });
+    try {
+      const data = await apiFetch<Booking[]>('/bookings');
+      set({ bookings: data.map(normalizeBooking) });
+    } catch {
+      set({ bookings: mockBookings });
+    }
   },
 
   fetchServices: async () => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    set({ services: mockServices });
+    try {
+      const data = await apiFetch<Service[]>('/services');
+      set({ services: data });
+    } catch {
+      set({ services: mockServices });
+    }
   },
 
   fetchDashboard: async () => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const { properties, bookings } = get();
-    const dashboard: Dashboard = {
-      totalProperties: properties.length,
-      totalBookings: bookings.length,
-      totalRevenue: bookings.reduce((sum, booking) => sum + booking.totalPrice, 0),
-      totalUsers: 150,
-      recentBookings: bookings.slice(0, 5),
-      monthlyRevenue: [
-        { month: 'Jan', revenue: 15000 },
-        { month: 'Fév', revenue: 18000 },
-        { month: 'Mar', revenue: 22000 },
-        { month: 'Avr', revenue: 19000 },
-        { month: 'Mai', revenue: 25000 },
-        { month: 'Juin', revenue: 28000 },
-      ],
-      propertyDistribution: [
-        { type: 'Appartements', count: 45 },
-        { type: 'Maisons', count: 28 },
-        { type: 'Commerces', count: 12 },
-        { type: 'Bureaux', count: 8 },
-      ],
-    };
-    
-    set({ dashboard });
+    try {
+      const data = await apiFetch<Dashboard>('/dashboard');
+      set({ dashboard: data });
+    } catch {
+      // fallback calculé localement
+      const { properties, bookings } = get();
+      const dashboard: Dashboard = {
+        totalProperties: properties.length,
+        totalBookings: bookings.length,
+        totalRevenue: bookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0),
+        totalUsers: 150,
+        recentBookings: bookings.slice(0, 5),
+        monthlyRevenue: [
+          { month: 'Jan', revenue: 15000 },
+          { month: 'Fév', revenue: 18000 },
+          { month: 'Mar', revenue: 22000 },
+          { month: 'Avr', revenue: 19000 },
+          { month: 'Mai', revenue: 25000 },
+          { month: 'Juin', revenue: 28000 },
+        ],
+        propertyDistribution: [
+          { type: 'Appartements', count: 45 },
+          { type: 'Maisons', count: 28 },
+          { type: 'Commerces', count: 12 },
+          { type: 'Bureaux', count: 8 },
+        ],
+      };
+      set({ dashboard });
+    }
   },
 
+  // ===== Mutations =====
   addProperty: async (propertyData) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const newProperty: Property = {
-      ...propertyData,
-      id: Date.now().toString(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    
-    set(state => ({
-      properties: [...state.properties, newProperty]
-    }));
+    // Optimistic UI (optionnel) : on peut attendre l’API si tu préfères
+    try {
+      const created = await apiFetch<Property>('/properties', {
+        method: 'POST',
+        body: JSON.stringify(propertyData),
+      });
+      set(state => ({ properties: [...state.properties, normalizeProperty(created)] }));
+    } catch {
+      // fallback local
+      const newProperty: Property = {
+        ...propertyData,
+        id: Date.now().toString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      set(state => ({ properties: [...state.properties, newProperty] }));
+    }
   },
 
   updateProperty: async (id, updates) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
+    // Optimistic update
     set(state => ({
-      properties: state.properties.map(p => 
-        p.id === id ? { ...p, ...updates, updatedAt: new Date() } : p
-      )
+      properties: state.properties.map(p => p.id === id ? { ...p, ...updates, updatedAt: new Date() } : p)
     }));
+    try {
+      await apiFetch(`/properties/${id}`, { method: 'PATCH', body: JSON.stringify(updates) });
+    } catch {
+      // en cas d’erreur API, idéalement re-fetch
+      get().fetchProperties();
+    }
   },
 
   deleteProperty: async (id) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    set(state => ({
-      properties: state.properties.filter(p => p.id !== id)
-    }));
+    // Optimistic removal
+    const prev = get().properties;
+    set({ properties: prev.filter(p => p.id !== id) });
+    try {
+      await apiFetch(`/properties/${id}`, { method: 'DELETE' });
+    } catch {
+      // rollback si API échoue
+      set({ properties: prev });
+    }
   },
 
   createBooking: async (bookingData) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const newBooking: Booking = {
-      ...bookingData,
-      id: Date.now().toString(),
-      createdAt: new Date(),
-    };
-    
-    set(state => ({
-      bookings: [...state.bookings, newBooking]
-    }));
+    try {
+      const created = await apiFetch<Booking>('/bookings', {
+        method: 'POST',
+        body: JSON.stringify(bookingData),
+      });
+      set(state => ({ bookings: [...state.bookings, normalizeBooking(created)] }));
+    } catch {
+      const newBooking: Booking = {
+        ...bookingData,
+        id: Date.now().toString(),
+        createdAt: new Date(),
+      } as Booking;
+      set(state => ({ bookings: [...state.bookings, newBooking] }));
+    }
   },
 
   updateBookingStatus: async (id, status) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    set(state => ({
-      bookings: state.bookings.map(b => 
-        b.id === id ? { ...b, status } : b
-      )
-    }));
+    set(state => ({ bookings: state.bookings.map(b => b.id === id ? { ...b, status } : b) }));
+    try {
+      await apiFetch(`/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+    } catch {
+      get().fetchBookings();
+    }
   },
 
   addNotification: (notificationData) => {
@@ -225,17 +299,31 @@ export const useDataStore = create<DataState>((set, get) => ({
       isRead: false,
       createdAt: new Date(),
     };
-    
-    set(state => ({
-      notifications: [notification, ...state.notifications]
-    }));
+    set(state => ({ notifications: [notification, ...state.notifications] }));
   },
 
   markNotificationAsRead: (id) => {
     set(state => ({
-      notifications: state.notifications.map(n => 
-        n.id === id ? { ...n, isRead: true } : n
-      )
+      notifications: state.notifications.map(n => n.id === id ? { ...n, isRead: true } : n)
     }));
   },
 }));
+
+// ======================
+// Normalizers (dates JSON → Date)
+// ======================
+function normalizeProperty(p: any): Property {
+  return {
+    ...p,
+    createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
+    updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
+  };
+}
+function normalizeBooking(b: any): Booking {
+  return {
+    ...b,
+    startDate: b.startDate ? new Date(b.startDate) : undefined,
+    endDate: b.endDate ? new Date(b.endDate) : undefined,
+    createdAt: b.createdAt ? new Date(b.createdAt) : new Date(),
+  };
+}

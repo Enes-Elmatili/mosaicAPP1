@@ -1,63 +1,146 @@
-const { Router } = require('express');
-const { validate } = require('../middleware/validate');
-const { createRoleSchema, updateRolePermissionsSchema, updateRoleSchema } = require('../validation/role');
-const roles = require('../services/roleService');
-const { HttpError } = require('../middleware/httpError');
+// backend/routes/roles.js
+import express from "express";
+import { validate } from "../middleware/validate.js";
+import {
+  createRoleSchema,
+  updateRoleSchema,
+  updateRolePermissionsSchema,
+} from "../validation/role.js";
+import roles from "../services/roleService.js";
+import { HttpError } from "../middleware/httpError.js";
+import authenticateFlexible from "../middleware/authenticateFlexible.js";
+import { requireRole } from "../middleware/requireRole.js";
 
-const router = Router();
+const router = express.Router();
 
-router.get('/', async (_req, res) => {
-  const data = await roles.listRoles();
-  res.json(data);
+// 🔐 Middleware global : seul un ADMIN peut gérer les rôles
+router.use(authenticateFlexible, requireRole("ADMIN"));
+
+/**
+ * GET /api/roles
+ * → Liste tous les rôles
+ */
+router.get("/", async (_req, res, next) => {
+  try {
+    const data = await roles.listRoles();
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
 });
 
-router.post('/', validate(createRoleSchema), async (req, res, next) => {
+/**
+ * POST /api/roles
+ * → Crée un rôle
+ */
+router.post("/", validate(createRoleSchema), async (req, res, next) => {
   try {
     const data = await roles.createRole(req.body);
-    res.status(201).json(data);
+    res.setHeader("Cache-Control", "no-store");
+    res.status(201).json({ success: true, data });
   } catch (e) {
+    if (e.code === "P2002") {
+      return res
+        .status(409)
+        .json({ success: false, error: "Un rôle avec ce nom existe déjà" });
+    }
     next(e);
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+/**
+ * GET /api/roles/:id
+ * → Détail d’un rôle
+ */
+router.get("/:id", async (req, res, next) => {
   try {
     const data = await roles.getRole(req.params.id);
-    if (!data) return next(new HttpError(404, 'Role not found'));
-    res.json(data);
+    if (!data) return next(new HttpError(404, "Role not found"));
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ success: true, data });
   } catch (e) {
     next(e);
   }
 });
 
-router.patch('/:id', validate(updateRoleSchema), async (req, res, next) => {
+/**
+ * PATCH /api/roles/:id
+ * → Met à jour un rôle
+ */
+router.patch("/:id", validate(updateRoleSchema), async (req, res, next) => {
   try {
     const data = await roles.updateRole(req.params.id, req.body);
-    res.json(data);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ success: true, data });
   } catch (e) {
+    if (e.code === "P2002") {
+      return res
+        .status(409)
+        .json({ success: false, error: "Un rôle avec ce nom existe déjà" });
+    }
+    if (e.code === "P2025") {
+      return res.status(404).json({ success: false, error: "Role not found" });
+    }
     next(e);
   }
 });
 
-router.delete('/:id', async (req, res, next) => {
+/**
+ * DELETE /api/roles/:id
+ * → Supprime un rôle
+ */
+router.delete("/:id", async (req, res, next) => {
   try {
     await roles.deleteRole(req.params.id);
     res.status(204).end();
   } catch (e) {
+    if (e.code === "P2025") {
+      return res.status(404).json({ success: false, error: "Role not found" });
+    }
+    if (e.code === "P2003") {
+      return res.status(409).json({
+        success: false,
+        error:
+          "Impossible de supprimer ce rôle car il est encore utilisé (utilisateurs ou permissions liés).",
+      });
+    }
     next(e);
   }
 });
 
-router.post('/:id/permissions', validate(updateRolePermissionsSchema), async (req, res, next) => {
-  try {
-    const { add = [], remove = [] } = req.body;
-    const data = await roles.updateRolePermissions(req.params.id, add, remove);
-    if (!data) return next(new HttpError(404, 'Role not found'));
-    res.json(data);
-  } catch (e) {
-    next(e);
+/**
+ * POST /api/roles/:id/permissions
+ * → Ajoute ou retire des permissions à un rôle
+ */
+router.post(
+  "/:id/permissions",
+  validate(updateRolePermissionsSchema),
+  async (req, res, next) => {
+    try {
+      const { add = [], remove = [] } = req.body;
+      const data = await roles.updateRolePermissions(
+        req.params.id,
+        add,
+        remove
+      );
+      if (!data) return next(new HttpError(404, "Role not found"));
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ success: true, data });
+    } catch (e) {
+      if (e.code === "P2025") {
+        return res.status(404).json({ success: false, error: "Role not found" });
+      }
+      if (e.code === "P2003") {
+        return res.status(409).json({
+          success: false,
+          error:
+            "Impossible de modifier les permissions : des contraintes de clé étrangère empêchent l’opération.",
+        });
+      }
+      next(e);
+    }
   }
-});
+);
 
-module.exports = router;
-
+export default router;

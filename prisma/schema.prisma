@@ -7,12 +7,38 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+// --- ENUMS --- //
 enum Priority {
   LOW
   MEDIUM
   HIGH
 }
 
+enum ProviderStatus {
+  READY
+  BUSY
+  PAUSED
+  OFFLINE
+}
+
+enum WalletTxType {
+  CREDIT
+  DEBIT
+  HOLD
+  RELEASE
+}
+
+enum RequestStatus {
+  PUBLISHED  // créée par le client
+  ACCEPTED   // acceptée par un provider
+  ONGOING    // travail en cours 
+  DONE       // terminée avec succès 
+  CANCELLED  // annulée par client ou admin
+}
+
+/**
+ * ============ RBAC ============
+ */
 model Role {
   id          String           @id @default(cuid())
   name        String           @unique
@@ -43,61 +69,101 @@ model RolePermission {
 model UserRole {
   userId String
   roleId String
+  user   User   @relation(fields: [userId], references: [id])
   role   Role   @relation(fields: [roleId], references: [id])
 
   @@id([userId, roleId])
 }
 
-/// Catégories et sous-catégories pour les demandes de service
+/**
+ * ============ USERS ============
+ */
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+  isActive  Boolean  @default(true)
+
+  userRoles      UserRole[]
+  requests       Request[]
+  reviews        Review[]
+  provider       Provider?
+  wallet         WalletAccount?
+  subscriptions  Subscription[]
+  files          File[]
+  contracts      Contract[]     @relation("UserContracts")
+  invoices       Invoice[]      @relation("UserInvoices")
+  AdminActionLog AdminActionLog[]
+}
+
+/**
+ * ============ TAXONOMY ============
+ */
 model Category {
-  id           Int           @id @default(autoincrement())
-  name         String        @unique
+  id            Int           @id @default(autoincrement())
+  name          String        @unique
   subcategories Subcategory[]
+  requests      Request[]
 }
 
 model Subcategory {
-  id         Int      @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
   categoryId Int
   name       String
   slug       String
-  category   Category @relation(fields: [categoryId], references: [id])
+  category   Category  @relation(fields: [categoryId], references: [id])
+  requests   Request[]
 
   @@unique([categoryId, slug])
 }
 
-/// Demandes de service créées par les clients
+/**
+ * ============ REQUESTS ============
+ */
 model Request {
-  id                  Int             @id @default(autoincrement())
-  clientId            String
-  categoryId          Int
-  subcategoryId       Int
-  propertyId          String?         // ID of the property concerned
-  serviceType         String          // Type of maintenance service requested
-  description         String
-  clientInfo          String?         // Optional client contact or information
-  urgent              Boolean         @default(false) // Emergency flag
-  providerId          String          // Assigned provider ID
-  providerName        String          // Assigned provider name
-  providerDistanceKm  Float           // Distance to provider in km
-  contractUrl         String?         // URL to generated contract PDF
-  address             String
-  lat                 Float
-  lng                 Float
-  geohash             String
-  preferredTimeStart  DateTime?
-  preferredTimeEnd    DateTime?
-  status              String          @default("PUBLISHED")
-  createdAt           DateTime        @default(now())
-  photos              RequestPhoto[]
+  id                 Int           @id @default(autoincrement())
+  clientId           String
+  categoryId         Int
+  subcategoryId      Int
+  propertyId         String?
+  serviceType        String
+  description        String
+  clientInfo         String?
+  urgent             Boolean       @default(false)
+  providerId         String?
+  providerDistanceKm Float?
+  contractUrl        String?
+  address            String
+  lat                Float
+  lng                Float
+  geohash            String
+  preferredTimeStart DateTime?
+  preferredTimeEnd   DateTime?
+  status             RequestStatus @default(PUBLISHED)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @default(now())
 
-  @@index([geohash(7)], name: "idx_request_geohash")
+  client      User        @relation(fields: [clientId], references: [id])
+  provider    Provider?   @relation("ProviderRequests", fields: [providerId], references: [id])
+  category    Category    @relation(fields: [categoryId], references: [id])
+  subcategory Subcategory @relation(fields: [subcategoryId], references: [id])
+  photos      RequestPhoto[]
+  reviews     Review[]
+
+  // Relations vers contrat et factures
+  contract    Contract?
+  invoices    Invoice[]
+
+  @@index([geohash], name: "idx_request_geohash")
   @@index([clientId], name: "idx_request_clientId")
 }
 
-/// Photos uploadées pour une demande
 model RequestPhoto {
-  id        Int     @id @default(autoincrement())
-  request   Request @relation(fields: [requestId], references: [id])
+  id        Int      @id @default(autoincrement())
   requestId Int
   url       String
   width     Int
@@ -105,60 +171,265 @@ model RequestPhoto {
   size      Int
   mime      String
   createdAt DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [id])
 }
 
-/// Maintenance service request for clients
-/// Possible statuses for a maintenance request (pending, assigned, in_progress, done, paid, closed)
-
-/// Maintenance service request for clients
+/**
+ * ======= MAINTENANCE ============
+ */
 model MaintenanceRequest {
-  id                 Int       @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   clientId           String
   propertyId         String
   serviceType        String
   description        String
   clientInfo         String?
-  urgent             Boolean   @default(false)
-  providerId         String
-  providerName       String
-  providerDistanceKm Float
+  urgent             Boolean  @default(false)
+  providerId         String?
+  providerName       String?
+  providerDistanceKm Float?
   contractUrl        String?
-  status             String        @default("pending")
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  status             String   @default("pending")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now())
 
-  // New normalized fields (Phase 2)
-  priority           Priority?
-  categoryId         String?
-  subcategoryId      String?
-  photos             Json       @default("[]")
+  priority      Priority?
+  categoryId    String?
+  subcategoryId String?
+  photos        Json?
 
-  @@index([clientId], name: "idx_maintenance_clientId")
-
-  /// History of status changes for this request
-  statusHistory      StatusHistory[]
+  statusHistory StatusHistory[]
+  alerts        Alert[]
 }
 
-/// Record of each status change on a maintenance request
 model StatusHistory {
-  id         Int            @id @default(autoincrement())
-  request    MaintenanceRequest @relation(fields: [requestId], references: [id])
-  requestId  Int
-  status     String
-  timestamp  DateTime       @default(now())
+  id        Int      @id @default(autoincrement())
+  requestId Int
+  status    String
+  timestamp DateTime @default(now())
 
-  @@index([requestId], name: "idx_statushistory_requestId")
+  request MaintenanceRequest @relation(fields: [requestId], references: [id])
 }
 
-/// Alerts generated for stalled maintenance requests
-model Alert {
-  id         Int      @id @default(autoincrement())
-  request    MaintenanceRequest @relation(fields: [requestId], references: [id])
-  requestId  Int
-  type       String   // e.g. "pending_overdue", "in_progress_overdue"
-  timestamp  DateTime @default(now())
-  resolved   Boolean  @default(false)
-  message    String   // Human-readable alert message
+/**
+ * ============ CONTRACTS & INVOICES ============
+ */
+model Contract {
+  id         String   @id @default(cuid())
+  requestId  Int      @unique
+  userId     String
+  providerId String
+  title      String
+  content    String
+  status     String   @default("ACTIVE")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  @@index([requestId], name: "idx_alert_requestId")
+  user     User     @relation("UserContracts", fields: [userId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+  request  Request  @relation(fields: [requestId], references: [id])
+
+  invoices Invoice[]
+}
+
+model Invoice {
+  id         String   @id @default(cuid())
+  contractId String
+  requestId  Int
+  userId     String
+  fileId     String?   // 🔹 ajout : lien vers File
+  amount     Float
+  currency   String   @default("MAD")
+  status     String   @default("PENDING")
+  issuedAt   DateTime @default(now())
+
+  contract Contract @relation(fields: [contractId], references: [id])
+  request  Request  @relation(fields: [requestId], references: [id])
+  user     User     @relation("UserInvoices", fields: [userId], references: [id])
+  file     File?    @relation(fields: [fileId], references: [id])
+}
+
+/**
+ * ============ ADMIN LOGS ============
+ */
+model AdminActionLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String
+  targetId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+}
+
+model File {
+  id        String   @id @default(cuid())
+  filename  String
+  original  String
+  size      Int
+  mimetype  String
+  url       String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  invoices Invoice[]
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  from      String
+  to        String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model Alert {
+  id        Int      @id @default(autoincrement())
+  requestId Int
+  type      String
+  timestamp DateTime @default(now())
+  resolved  Boolean  @default(false)
+  message   String
+
+  request MaintenanceRequest @relation(fields: [requestId], references: [id])
+}
+
+/**
+ * ============ REVIEWS ============
+ */
+model Review {
+  id         String   @id @default(cuid())
+  requestId  Int
+  clientId   String
+  providerId String
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+
+  request  Request  @relation(fields: [requestId], references: [id])
+  client   User     @relation(fields: [clientId], references: [id])
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@unique([requestId, clientId])
+}
+
+/**
+ * ============ PROVIDERS ============
+ */
+model Provider {
+  id          String  @id @default(cuid())
+  name        String
+  email       String? @unique
+  phone       String?
+  city        String?
+  description String?
+  lat         Float?
+  lng         Float?
+  geohash     String?
+  isActive    Boolean @default(true)
+
+  jobsCompleted      Int     @default(0)
+  avgRating          Float   @default(0)
+  totalRatings       Int     @default(0)
+  totalRequests      Int     @default(0)
+  acceptedRequests   Int     @default(0)
+  declinedRequests   Int     @default(0)
+  avgResponseTimeSec Int     @default(0)
+  rankScore          Float   @default(0)
+  premium            Boolean @default(false)
+
+  status       ProviderStatus @default(OFFLINE)
+  lastActiveAt DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @default(now())
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  requests   Request[]           @relation("ProviderRequests")
+  payments   Payment[]
+  reviews    Review[]
+  contracts  Contract[]
+  statusLogs ProviderStatusLog[]
+
+  @@index([geohash])
+  @@index([status])
+  @@index([rankScore])
+}
+
+model ProviderStatusLog {
+  id         String         @id @default(cuid())
+  providerId String
+  status     ProviderStatus
+  changedAt  DateTime       @default(now())
+
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@index([providerId, changedAt])
+}
+
+/**
+ * ============ SUBSCRIPTION ==========
+ */
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  planName             String
+  price                Float
+  status               String    @default("PENDING")
+  startDate            DateTime  @default(now())
+  endDate              DateTime?
+  stripeSubscriptionId String?   @unique
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+/**
+ * ============ PAYMENTS ============
+ */
+model Payment {
+  id         String   @id @default(cuid())
+  providerId String
+  amount     Int
+  currency   String   @default("MAD")
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@index([providerId, createdAt])
+}
+
+/**
+ * ============ WALLET ============
+ */
+model WalletAccount {
+  id      String @id @default(cuid())
+  userId  String @unique
+  balance Int    @default(0)
+
+  user User                @relation(fields: [userId], references: [id])
+  txs  WalletTransaction[]
+}
+
+model WalletTransaction {
+  id            String       @id @default(cuid())
+  accountId     String
+  amount        Int
+  type          WalletTxType
+  reference     String?
+  balanceBefore Int          @default(0)
+  balanceAfter  Int          @default(0)
+  createdAt     DateTime     @default(now())
+
+  account WalletAccount @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, createdAt])
 }

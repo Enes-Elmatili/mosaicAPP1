@@ -1,122 +1,189 @@
-import React, { useState } from 'react';
-import { Bell, Menu, Search, User, LogOut, Settings } from 'lucide-react';
-import { useAuthStore } from '../../store/authStore';
-import { useDataStore } from '../../store/dataStore';
+import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { Search, ChevronDown } from "lucide-react";
 
-interface HeaderProps {
-  onMenuClick: () => void;
-}
+type Props = {
+  children?: React.ReactNode;
+  className?: string;
+  container?: boolean;
+  headerVariant?: "transparent" | "solid";
+};
 
-export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
-  const { user, logout } = useAuthStore();
-  const { notifications } = useDataStore();
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
+export default function PageWrapper({
+  children,
+  className = "",
+  container = true,
+  headerVariant = "transparent",
+}: Props) {
+  const [openDropdown, setOpenDropdown] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  // Fermer dropdown au clic extérieur / ESC
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdown(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpenDropdown(false);
+        setShowSearch(false);
+      }
+    };
+    window.addEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onClick);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  // Focus auto quand on ouvre la recherche
+  useEffect(() => {
+    if (showSearch && searchRef.current) {
+      searchRef.current.focus();
+    }
+  }, [showSearch]);
+
+  const isTransparent = headerVariant === "transparent";
 
   return (
-    <header className="bg-white border-b border-gray-200 px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-md hover:bg-gray-100 transition-colors"
+    <div className="relative min-h-screen bg-primary text-neutral-100">
+      {/* HEADER */}
+      <header
+        className={
+          isTransparent
+            ? "absolute inset-x-0 top-0 z-20"
+            : "relative z-20 border-b border-neutral-800 bg-neutral-900"
+        }
+      >
+        <div className="container mx-auto px-4 md:px-6">
+          <nav
+            className={
+              isTransparent
+                ? "mt-3 flex items-center justify-between rounded-full border border-white/20 bg-white/10 backdrop-blur-xl px-4 py-2 shadow-[0_2px_30px_rgba(0,0,0,0.25)]"
+                : "flex items-center justify-between py-3"
+            }
           >
-            <Menu className="w-6 h-6" />
-          </button>
-          
-          <div className="hidden sm:flex items-center bg-gray-50 rounded-lg px-4 py-2 max-w-md w-full">
-            <Search className="w-4 h-4 text-gray-400 mr-3" />
-            <input
-              type="text"
-              placeholder="Rechercher..."
-              className="bg-transparent border-none outline-none flex-1 text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-4">
-          {/* Notifications */}
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="p-2 rounded-full hover:bg-gray-100 transition-colors relative"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {unreadCount}
+            {/* Logo */}
+            <Link to="/" className="inline-flex items-center gap-2" aria-label="Accueil">
+              {isTransparent ? (
+                <img src="/logo.png" alt="MOSAÏC" className="h-8 w-auto drop-shadow" />
+              ) : (
+                <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-secondary via-secondary-purple to-secondary-pink bg-clip-text text-transparent">
+                  MOSAÏC
                 </span>
               )}
-            </button>
+            </Link>
 
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border z-50">
-                <div className="p-4 border-b">
-                  <h3 className="font-semibold">Notifications</h3>
-                </div>
-                <div className="max-h-96 overflow-y-auto">
-                  {notifications.length === 0 ? (
-                    <div className="p-4 text-center text-gray-500">
-                      Aucune notification
-                    </div>
-                  ) : (
-                    notifications.slice(0, 5).map((notification) => (
-                      <div
-                        key={notification.id}
-                        className={`p-4 border-b hover:bg-gray-50 cursor-pointer ${
-                          !notification.isRead ? 'bg-blue-50' : ''
-                        }`}
-                      >
-                        <h4 className="font-medium text-sm">{notification.title}</h4>
-                        <p className="text-gray-600 text-xs mt-1">{notification.message}</p>
-                        <span className="text-xs text-gray-400 mt-2 block">
-                          {notification.createdAt.toLocaleDateString()}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+            <div className="flex-1" />
 
-          {/* User Menu */}
-          <div className="relative">
-            <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center">
-                <User className="w-4 h-4 text-white" />
-              </div>
-              <div className="hidden sm:block text-left">
-                <div className="text-sm font-medium">{user?.firstName} {user?.lastName}</div>
-                <div className="text-xs text-gray-500 capitalize">{user?.role}</div>
-              </div>
-            </button>
-
-            {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border z-50">
-                <div className="p-2">
-                  <button className="w-full flex items-center space-x-2 px-3 py-2 text-left hover:bg-gray-50 rounded-md transition-colors">
-                    <Settings className="w-4 h-4" />
-                    <span className="text-sm">Paramètres</span>
-                  </button>
+            {/* Actions droites */}
+            <div className="flex items-center gap-2">
+              {/* Recherche */}
+              <div className="relative">
+                {!showSearch ? (
                   <button
-                    onClick={logout}
-                    className="w-full flex items-center space-x-2 px-3 py-2 text-left hover:bg-gray-50 rounded-md transition-colors text-red-600"
+                    onClick={() => setShowSearch(true)}
+                    className={
+                      isTransparent
+                        ? "inline-flex items-center justify-center h-10 w-10 rounded-full border border-white/40 bg-white/10 hover:bg-white/20 text-white transition"
+                        : "inline-flex items-center justify-center h-10 w-10 rounded-full border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition"
+                    }
+                    aria-label="Rechercher"
                   >
-                    <LogOut className="w-4 h-4" />
-                    <span className="text-sm">Déconnexion</span>
+                    <Search className="h-4 w-4" />
                   </button>
-                </div>
+                ) : (
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[260px] md:w-[320px] rounded-full border border-neutral-700 bg-neutral-900 shadow-lg px-4 py-2 flex items-center gap-2">
+                    <Search className="h-4 w-4 text-neutral-500" aria-hidden="true" />
+                    <input
+                      ref={searchRef}
+                      type="text"
+                      placeholder="Rechercher..."
+                      className="w-full bg-transparent outline-none text-sm text-neutral-100 placeholder-neutral-500"
+                      onBlur={() => setTimeout(() => setShowSearch(false), 120)}
+                    />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+
+              {/* Dropdown */}
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setOpenDropdown((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={openDropdown}
+                  className={
+                    isTransparent
+                      ? "inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/10 hover:bg-white/20 px-4 h-10 text-sm font-semibold text-white transition"
+                      : "inline-flex items-center gap-2 rounded-full border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-4 h-10 text-sm font-semibold text-neutral-200 transition"
+                  }
+                >
+                  Menu
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${openDropdown ? "rotate-180" : ""}`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {openDropdown && (
+                  <div
+                    role="menu"
+                    tabIndex={-1}
+                    className="absolute right-0 mt-2 w-56 rounded-2xl border border-neutral-700 bg-neutral-900 text-neutral-100 shadow-xl overflow-hidden"
+                  >
+                    <Link
+                      to="/offers"
+                      role="menuitem"
+                      className="block px-4 py-3 hover:bg-neutral-800"
+                      onClick={() => setOpenDropdown(false)}
+                    >
+                      Offres
+                    </Link>
+                    <Link
+                      to="/login"
+                      role="menuitem"
+                      className="block px-4 py-3 hover:bg-neutral-800"
+                      onClick={() => setOpenDropdown(false)}
+                    >
+                      Se connecter
+                    </Link>
+                    <Link
+                      to="/signup"
+                      role="menuitem"
+                      className="block px-4 py-3 hover:bg-neutral-800 font-semibold text-secondary"
+                      onClick={() => setOpenDropdown(false)}
+                    >
+                      Créer un compte
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          </nav>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Spacer si header SOLIDE */}
+      {headerVariant === "solid" && <div className="h-20 md:h-[88px]" />}
+
+      {/* CONTENU */}
+      <main
+        className={`${container ? "container mx-auto px-4 md:px-6" : ""} ${className} animate-fadeIn`}
+      >
+        {children}
+      </main>
+
+      {/* FOOTER */}
+      <footer className="bg-neutral-900 mt-16 border-t border-neutral-800">
+        <div className="container mx-auto px-6 py-4 text-center text-sm text-neutral-500">
+          © {new Date().getFullYear()} MOSAÏC. Tous droits réservés.
+        </div>
+      </footer>
+    </div>
   );
-};
+}

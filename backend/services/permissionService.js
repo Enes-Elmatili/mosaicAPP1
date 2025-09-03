@@ -1,26 +1,53 @@
-const { prisma } = require('../db/prisma');
+// backend/services/permissionService.js
+import { prisma } from "../db/prisma.js";
 
-function listPermissions() {
-  return prisma.permission.findMany({ orderBy: { key: 'asc' } });
+/**
+ * Liste toutes les permissions
+ */
+export async function listPermissions() {
+  return prisma.permission.findMany();
 }
 
-function getPermission(id) {
+/**
+ * Récupère une permission par son ID
+ * @param {string} id
+ */
+export async function getPermission(id) {
   return prisma.permission.findUnique({ where: { id } });
 }
 
-function createPermission(input) {
-  return prisma.permission.create({ data: input });
+/**
+ * Crée une permission
+ * @param {{key:string, label:string, description?:string}} data
+ */
+export async function createPermission(data) {
+  return prisma.permission.create({ data });
 }
 
-function updatePermission(id, input) {
-  return prisma.permission.update({ where: { id }, data: input });
+/**
+ * Met à jour une permission
+ * @param {string} id
+ * @param {{key?:string, label?:string, description?:string}} data
+ */
+export async function updatePermission(id, data) {
+  return prisma.permission.update({
+    where: { id },
+    data,
+  });
 }
 
-function deletePermission(id) {
+/**
+ * Supprime une permission
+ * @param {string} id
+ */
+export async function deletePermission(id) {
   return prisma.permission.delete({ where: { id } });
 }
 
-module.exports = {
+/**
+ * Export par défaut uniformisé
+ */
+export default {
   listPermissions,
   getPermission,
   createPermission,

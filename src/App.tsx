@@ -1,138 +1,160 @@
 /**
  * App.tsx
- * Entrée principale : routage + protections.
+ * Entrée principale : routage + protections + gestion des erreurs.
  */
-import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Suspense, lazy } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-import RequireAuth from './components/RequireAuth';
-import RequirePermission from './components/RequirePermission';
-import ForbidRole from './components/ForbidRole';
-import PublicLayout from './components/Layout/PublicLayout';
-import { useAuth } from './store/auth';
+import RequireAuth from "./components/RequireAuth";
+import RequirePermission from "./components/RequirePermission";
+import AppRoleRedirect from "./components/AppRoleRedirect";
+import PublicLayout from "./components/layout/PublicLayout";
+import { PrivateLayout } from "./components/layout/PrivateLayout";
 
-// Lazy pages
-const HomePage = lazy(() => import('./pages/app/HomePage'));
-const OffersPage = lazy(() => import('./pages/public/OffersPage'));
-const PricingPage = lazy(() => import('./pages/public/PricingPage'));
-const LoginPage = lazy(() => import('./pages/public/LoginPage'));
-const SignupPage = lazy(() => import('./pages/public/SignupPage'));
-const RentalSearchPage = lazy(() => import('./pages/public/RentalSearchPage'));
-const RentalDetailPage = lazy(() => import('./pages/public/RentalDetailPage'));
-const LegalPage = lazy(() => import('./pages/public/LegalPage'));
-const PolicyPage = lazy(() => import('./pages/public/PolicyPage'));
-const ProfileSettingsPage = lazy(() => import('./pages/common/ProfileSettingsPage'));
-const NotificationsCenterPage = lazy(() => import('./pages/common/NotificationsCenterPage'));
-const DocumentsPage = lazy(() => import('./pages/common/DocumentsPage'));
-const MessagesPage = lazy(() => import('./pages/common/MessagesPage'));
-const OfflinePage = lazy(() => import('./pages/common/OfflinePage'));
-const UnauthorizedPage = lazy(() => import('./pages/common/UnauthorizedPage'));
-const NotFoundPage = lazy(() => import('./pages/common/NotFoundPage'));
-const TenantDashboardPage = lazy(() => import('./pages/app/tenant/DashboardPage'));
-const RentPaymentPage = lazy(() => import('./pages/app/tenant/RentPaymentPage'));
-const ContractsPage = lazy(() => import('./pages/app/tenant/ContractsPage'));
-const TicketsPage = lazy(() => import('./pages/app/tenant/TicketsPage'));
-const RequestsNewPage = lazy(() => import('./pages/app/tenant/RequestsNewPage'));
-const RequestsListPage = lazy(() => import('./pages/app/tenant/RequestsListPage'));
-const RequestsDetailPage = lazy(() => import('./pages/app/tenant/RequestsDetailPage'));
-const OwnerDashboardPage = lazy(() => import('./pages/app/owner/DashboardPage'));
-const PropertiesPage = lazy(() => import('./pages/app/owner/PropertiesPage'));
-const InterventionsPage = lazy(() => import('./pages/app/owner/InterventionsPage'));
-const InvoicesPage = lazy(() => import('./pages/app/owner/InvoicesPage'));
-const ReportingPage = lazy(() => import('./pages/app/owner/ReportingPage'));
-const ShortTermRentalPage = lazy(() => import('./pages/app/owner/ShortTermRentalPage'));
-const ProviderMissionsPage = lazy(() => import('./pages/app/provider/MissionsPage'));
-const ProviderMissionDetailPage = lazy(() => import('./pages/app/provider/MissionDetailPage'));
-const PlanningPage = lazy(() => import('./pages/app/provider/PlanningPage'));
-const AdminDashboardPage = lazy(() => import('./pages/admin/DashboardPage'));
-const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
-const RolesPermissionsPage = lazy(() => import('./pages/admin/RolesPermissionsPage'));
-const AdminTicketsPage = lazy(() => import('./pages/admin/TicketsPage'));
-const AdminMissionsPage = lazy(() => import('./pages/admin/MissionsPage'));
-const AdminDocumentsPage = lazy(() => import('./pages/admin/DocumentsPage'));
+// --- ErrorBoundary ---
+import React from "react";
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.error("Erreur capturée par ErrorBoundary:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen text-center p-6">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">
+            ⚠️ Une erreur est survenue
+          </h1>
+          <p className="text-gray-600">
+            Impossible de charger cette page. Veuillez réessayer plus tard.
+          </p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// --- Lazy loading des pages ---
+const HomePage = lazy(() => import("./pages/app/HomePage"));
+const OffersPage = lazy(() => import("./pages/public/OffersPage"));
+const LoginPage = lazy(() => import("./pages/public/LoginPage"));
+const SignupPage = lazy(() => import("./pages/public/SignupPage"));
+const LegalPage = lazy(() => import("./pages/public/LegalPage"));
+const PolicyPage = lazy(() => import("./pages/public/PolicyPage"));
+
+const ProfileSettingsPage = lazy(() => import("./pages/common/ProfileSettingsPage"));
+const NotificationsCenterPage = lazy(() => import("./pages/common/NotificationsCenterPage"));
+const DocumentsPage = lazy(() => import("./pages/common/DocumentsPage"));
+const MessagesPage = lazy(() => import("./pages/common/MessagesPage"));
+const OfflinePage = lazy(() => import("./pages/common/OfflinePage"));
+const UnauthorizedPage = lazy(() => import("./pages/common/UnauthorizedPage"));
+const NotFoundPage = lazy(() => import("./pages/common/NotFoundPage"));
+
+// --- CLIENT ---
+const ClientDashboardPage = lazy(() => import("./pages/app/client/DashboardPage.tsx"));
+const ClientRequestsNewPage = lazy(() => import("./pages/app/client/RequestsNewPage.tsx"));
+const ClientRequestsListPage = lazy(() => import("./pages/app/client/RequestListPage.tsx"));
+const ClientInvoicesPage = lazy(() => import("./pages/app/client/InvoicesPage.tsx"));
+const ClientContractsPage = lazy(() => import("./pages/app/client/ContractsPage.tsx"));
+const ClientTicketsPage = lazy(() => import("./pages/app/client/TicketsPage.tsx"));
+
+// --- PROVIDER ---
+const ProviderDashboardPage = lazy(() => import("./pages/app/provider/DashboardPage"));
+const ProviderMissionsPage = lazy(() => import("./pages/app/provider/MissionsPage"));
+const ProviderMissionDetailPage = lazy(() => import("./pages/app/provider/MissionDetailPage"));
+const ProviderPlanningPage = lazy(() => import("./pages/app/provider/PlanningPage"));
+const ProviderEarningsPage = lazy(() => import("./pages/app/provider/EarningsPage"));
+
+// --- ADMIN ---
+import AdminLayout from "./pages/admin/AdminLayout";
+const AdminDashboardPage = lazy(() => import("./pages/admin/AdminDashboardPage"));
+const AdminUsersPage = lazy(() => import("./pages/admin/UsersPage"));
+const AdminRolesPermissionsPage = lazy(() => import("./pages/admin/RolesPermissionsPage"));
+const AdminTicketsPage = lazy(() => import("./pages/admin/TicketsPage"));
+const AdminMissionsPage = lazy(() => import("./pages/admin/MissionsPage"));
+const AdminDocumentsPage = lazy(() => import("./pages/admin/DocumentsPage"));
+const AdminRequestsPage = lazy(() => import("./pages/admin/AdminRequestsPage"));
 
 export default function App() {
-  // ⚡ Initialise l’auth une fois au chargement
-  const init = useAuth((s) => s.init);
-  useEffect(() => { init(); }, [init]);
-
   return (
     <BrowserRouter>
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center h-screen">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500" />
-          </div>
-        }
-      >
-        <Routes>
-          {/* Public */}
-          <Route element={<PublicLayout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/offers" element={<OffersPage />} />
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
-            <Route path="/rental/search" element={<RentalSearchPage />} />
-            <Route path="/rental/:id" element={<RentalDetailPage />} />
-            <Route path="/legal" element={<LegalPage />} />
-            <Route path="/policy" element={<PolicyPage />} />
-          </Route>
-
-          {/* Commun authentifié */}
-          <Route element={<RequireAuth />}>
-            {/* 🏠 Home app après login sur /app (et non plus sur /) */}
-            <Route path="/app" element={<HomePage />} />
-
-            <Route path="/app/profile" element={<ProfileSettingsPage />} />
-            <Route path="/app/notifications" element={<NotificationsCenterPage />} />
-            <Route path="/app/documents" element={<DocumentsPage />} />
-            <Route path="/app/messages" element={<MessagesPage />} />
-
-            {/* Tenant */}
-            <Route path="/app/tenant/dashboard" element={<TenantDashboardPage />} />
-            <Route path="/app/tenant/rent-payment" element={<RentPaymentPage />} />
-            <Route path="/app/tenant/contracts" element={<ContractsPage />} />
-            <Route path="/app/tenant/tickets" element={<TicketsPage />} />
-
-            {/* Interdiction du rôle provider pour la création de demande */}
-            <Route element={<ForbidRole role="provider" />}>
-              <Route path="/app/tenant/requests/new" element={<RequestsNewPage />} />
+      <ErrorBoundary>
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center h-screen">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+            </div>
+          }
+        >
+          <Routes>
+            {/* PUBLIC */}
+            <Route element={<PublicLayout />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/offers" element={<OffersPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<SignupPage />} />
+              <Route path="/legal" element={<LegalPage />} />
+              <Route path="/policy" element={<PolicyPage />} />
             </Route>
 
-            <Route path="/app/tenant/requests" element={<RequestsListPage />} />
-            <Route path="/app/tenant/requests/:id" element={<RequestsDetailPage />} />
+            {/* AUTHENTIFIÉS (clients + providers) */}
+            <Route element={<RequireAuth />}>
+              <Route element={<PrivateLayout />}>
+                <Route path="/app" element={<AppRoleRedirect />} />
 
-            {/* Owner */}
-            <Route path="/app/owner/dashboard" element={<OwnerDashboardPage />} />
-            <Route path="/app/owner/properties" element={<PropertiesPage />} />
-            <Route path="/app/owner/interventions" element={<InterventionsPage />} />
-            <Route path="/app/owner/invoices" element={<InvoicesPage />} />
-            <Route path="/app/owner/reporting" element={<ReportingPage />} />
-            <Route path="/app/owner/short-term-rental" element={<ShortTermRentalPage />} />
+                {/* Commun */}
+                <Route path="/app/profile" element={<ProfileSettingsPage />} />
+                <Route path="/app/notifications" element={<NotificationsCenterPage />} />
+                <Route path="/app/documents" element={<DocumentsPage />} />
+                <Route path="/app/messages" element={<MessagesPage />} />
 
-            {/* Provider */}
-            <Route path="/app/provider/missions" element={<ProviderMissionsPage />} />
-            <Route path="/app/provider/missions/:id" element={<ProviderMissionDetailPage />} />
-            <Route path="/app/provider/planning" element={<PlanningPage />} />
-          </Route>
+                {/* CLIENT */}
+                <Route path="/app/client/dashboard" element={<ClientDashboardPage />} />
+                <Route path="/app/client/requests/new" element={<ClientRequestsNewPage />} />
+                <Route path="/app/client/requests" element={<ClientRequestsListPage />} />
+                <Route path="/app/client/invoices" element={<ClientInvoicesPage />} />
+                <Route path="/app/client/contracts" element={<ClientContractsPage />} />
+                <Route path="/app/client/tickets" element={<ClientTicketsPage />} />
 
-          {/* Admin */}
-          <Route element={<RequirePermission permission="admin" />}>
-            <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-            <Route path="/admin/users" element={<UsersPage />} />
-            <Route path="/admin/roles-permissions" element={<RolesPermissionsPage />} />
-            <Route path="/admin/tickets" element={<AdminTicketsPage />} />
-            <Route path="/admin/missions" element={<AdminMissionsPage />} />
-            <Route path="/admin/documents" element={<AdminDocumentsPage />} />
-          </Route>
+                {/* PROVIDER */}
+                <Route path="/app/provider/dashboard" element={<ProviderDashboardPage />} />
+                <Route path="/app/provider/missions" element={<ProviderMissionsPage />} />
+                <Route path="/app/provider/missions/:id" element={<ProviderMissionDetailPage />} />
+                <Route path="/app/provider/planning" element={<ProviderPlanningPage />} />
+                <Route path="/app/provider/earnings" element={<ProviderEarningsPage />} />
+              </Route>
+            </Route>
 
-          {/* Divers */}
-          <Route path="/offline" element={<OfflinePage />} />
-          <Route path="/unauthorized" element={<UnauthorizedPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </Suspense>
+            {/* ADMIN (protégé + propre layout admin) */}
+            <Route element={<RequirePermission permission="admin" />}>
+              <Route element={<AdminLayout />}>
+                <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+                <Route path="/admin/users" element={<AdminUsersPage />} />
+                <Route path="/admin/roles-permissions" element={<AdminRolesPermissionsPage />} />
+                <Route path="/admin/tickets" element={<AdminTicketsPage />} />
+                <Route path="/admin/missions" element={<AdminMissionsPage />} />
+                <Route path="/admin/documents" element={<AdminDocumentsPage />} />
+                <Route path="/admin/requests" element={<AdminRequestsPage />} />
+              </Route>
+            </Route>
+
+            {/* Divers */}
+            <Route path="/offline" element={<OfflinePage />} />
+            <Route path="/unauthorized" element={<UnauthorizedPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

@@ -1,7 +1,38 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "baseUrl": ".",
+    "paths": { "@/*": ["src/*"] },
+
+    "typeRoots": ["./src/types", "./node_modules/@types"],
+
+    "allowJs": false,
+    "checkJs": false,
+    "noEmit": true,
+
+    "jsx": "react-jsx",
+
+  },
+  "include": ["src", "tests", "src/types"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-backend",
+    "build",
+    "coverage",
+    "backend",          // ⬅️ très important: on sort le backend du projet racine
+    "playwright-report",
+    ".playwright",
+    ".vite",
+    ".cypress",
+    ".venv"
   ]
 }

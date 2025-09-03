@@ -1,167 +1,189 @@
-/**
- * AuthContext.tsx
- * Fournit le contexte d'authentification (user, login, logout, signup).
- */
-import { createContext, useContext, ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, useCallback } from "react";
+import toast from "react-hot-toast";
+import { buildUrl } from "@/utils/api";
+import { AuthContext } from "./auth-context"; // ✅ bon chemin
 
-// Type utilisateur retourné par l'API
+// Types cohérents avec le backend
 export type AuthUser = {
   id: string;
-  email?: string;
+  email: string;
   name?: string;
-  roles: string[];
-  effectivePermissions: string[];
+  firstName?: string;
+  lastName?: string;
+  roles: string[]; // tableau de rôles
+  role: string; // rôle unique (fallback)
+};
+
+export type LoginResponse = {
+  ok: boolean;
+  token: string;
+  user: AuthUser;
 };
 
 export interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   error: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name?: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResponse>;
   logout: () => void;
+  signup: (
+    email: string,
+    password: string,
+    name: string,
+    role: string
+  ) => Promise<LoginResponse>;
   isAuthenticated: boolean;
 }
 
-export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
+// ✅ Normalise l’utilisateur pour que "roles" ne soit jamais vide
+function normalizeUser(u: AuthUser): AuthUser {
+  const roles = u.roles && u.roles.length > 0 ? u.roles : [u.role];
+  return { ...u, roles };
 }
 
-/**
- * Fetches /api/me, tracks loading, error and version to allow invalidation on focus.
- */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Base URL for API requests; use env var or default to relative path
-  const baseUrl = import.meta.env.VITE_API_ORIGIN ?? '';
-  const authFetch = (input: RequestInfo, init?: RequestInit) => {
-    const token = localStorage.getItem('token');
-    const headers = {
-      ...(init?.headers || {}),
-      Authorization: token ? `Bearer ${token}` : undefined,
-      'Content-Type': 'application/json',
-    } as Record<string, string>;
-    // Allow relative or absolute URLs
-    const url = typeof input === 'string' && !input.startsWith('http') ? `${baseUrl}${input}` : input;
-    return fetch(url, { ...init, headers });
-  };
+  const http = useCallback(
+    async (endpoint: string, config: RequestInit = {}): Promise<unknown> => {
+      const token = localStorage.getItem("authToken");
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+        ...config.headers,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
 
-  const login = async (email: string, password: string): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${baseUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+      const res = await fetch(buildUrl(endpoint), {
+        ...config,
+        headers,
+        credentials: "include",
       });
-      let data: any;
-      try {
-        data = await res.json();
-      } catch {
-        if (!res.ok) throw new Error(`Login failed (${res.status})`);
-      }
-      if (!res.ok) throw new Error(data?.error || `Login failed (${res.status})`);
-      localStorage.setItem('token', data.token);
-      // Fetch full user profile (roles and permissions)
-      const meRes = await authFetch('/api/me');
-      let meData: any;
-      try {
-        meData = await meRes.json();
-      } catch {
-        if (!meRes.ok) throw new Error(`Fetch user failed (${meRes.status})`);
-      }
-      if (!meRes.ok) throw new Error(meData?.error || `Fetch user failed (${meRes.status})`);
-      setUser(meData);
-    } catch (e: any) {
-      setError(e.message);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const signup = async (email: string, password: string, name?: string): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${baseUrl}/api/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, role }),
-      });
-      let data: any;
-      try {
-        data = await res.json();
-      } catch {
-        if (!res.ok) throw new Error(`Signup failed (${res.status})`);
+      if (!res.ok) {
+        const text = await res.text();
+        let message = "Erreur inconnue.";
+        try {
+          const err = JSON.parse(text) as { message?: string };
+          message = err.message || message;
+        } catch {
+          message = text || message;
+        }
+        throw new Error(message);
       }
-      if (!res.ok) throw new Error(data?.error || `Signup failed (${res.status})`);
-      localStorage.setItem('token', data.token);
-      // Fetch full user profile (roles and permissions)
-      const meRes = await authFetch('/api/me');
-      let meData: any;
-      try {
-        meData = await meRes.json();
-      } catch {
-        if (!meRes.ok) throw new Error(`Fetch user failed (${meRes.status})`);
-      }
-      if (!meRes.ok) throw new Error(meData?.error || `Fetch user failed (${meRes.status})`);
-      setUser(meData);
-    } catch (e: any) {
-      setError(e.message);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const logout = (): void => {
-    localStorage.removeItem('token');
+      const contentType = res.headers.get("content-type");
+      if (contentType?.includes("application/json")) {
+        return res.json();
+      }
+      return {};
+    },
+    []
+  );
+
+  const logout = useCallback((): void => {
+    localStorage.removeItem("authToken");
     setUser(null);
-  };
+    setError(null);
+    toast.success("Vous avez été déconnecté.");
+  }, []);
+
+  const checkAuth = useCallback(async (): Promise<AuthUser | null> => {
+    const token = localStorage.getItem("authToken");
+    if (!token) return null;
+
+    try {
+      const data = (await http("/auth/me", { method: "GET" })) as {
+        ok: boolean;
+        user: AuthUser;
+      };
+      if (!data?.user) return null;
+
+      const normalized = normalizeUser(data.user);
+      setUser(normalized);
+      return normalized;
+    } catch {
+      logout();
+      return null;
+    }
+  }, [http, logout]);
+
+  const login = useCallback(
+    async (email: string, password: string): Promise<LoginResponse> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = (await http("/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email, password }),
+        })) as LoginResponse;
+
+        if (!data?.token || !data?.user) {
+          throw new Error("Réponse invalide du serveur.");
+        }
+
+        localStorage.setItem("authToken", data.token);
+        const normalized = normalizeUser(data.user);
+        setUser(normalized);
+        toast.success("Connexion réussie !");
+        return { ...data, user: normalized };
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Erreur de connexion.";
+        setError(msg);
+        throw new Error(msg);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [http]
+  );
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Optionally: fetch /api/me
-      authFetch(`/api/me`)
-        .then(async res => {
-          if (res.ok) {
-            try {
-              const data = await res.json();
-              setUser(data);
-            } catch {
-              logout();
-            }
-          } else {
-            logout();
-          }
-        })
-        .catch(() => logout());
-    }
-  }, []);
+    checkAuth().finally(() => setLoading(false));
+  }, [checkAuth]);
+
+  const signup = useCallback(
+    async (
+      email: string,
+      password: string,
+      name: string,
+      role: string
+    ): Promise<LoginResponse> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = (await http("/auth/signup", {
+          method: "POST",
+          body: JSON.stringify({ email, password, name, role }),
+        })) as LoginResponse;
+
+        if (!data?.token || !data?.user) {
+          throw new Error("Réponse invalide du serveur.");
+        }
+
+        localStorage.setItem("authToken", data.token);
+        const normalized = normalizeUser(data.user);
+        setUser(normalized);
+        toast.success("Inscription réussie !");
+        return { ...data, user: normalized };
+      } catch (e: unknown) {
+        const msg =
+          e instanceof Error ? e.message : "Erreur lors de l'inscription.";
+        setError(msg);
+        throw new Error(msg);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [http]
+  );
+
+  const isAuthenticated = user !== null;
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        error,
-        login,
-        signup,
-        logout,
-        isAuthenticated: user !== null,
-      }}
+      value={{ user, loading, error, login, logout, signup, isAuthenticated }}
     >
       {children}
     </AuthContext.Provider>

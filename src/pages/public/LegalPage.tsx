@@ -1,5 +1,5 @@
 import React from 'react';
-import PageWrapper from '../../components/Layout/PageWrapper';
+import PageWrapper from '../components/Layout/PageWrapper';
 
 const LegalPage: React.FC = () => <PageWrapper title="Mentions légales" />;
 

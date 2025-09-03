@@ -1,70 +1,56 @@
-// Controller to export status history of maintenance requests as PDF or CSV
-const PDFDocument = require('pdfkit');
-const { prisma } = require('../db/prisma');
+// backend/controllers/statusExportController.js
+import { prisma } from '../db/prisma.js';
+import { toCsv } from '../utils/csv.js';
+import { HttpError } from '../middleware/httpError.js';
 
 /**
- * GET /requests/:id/status-history/export/pdf
- * Generate and stream a PDF timeline of status history entries.
+ * @name exportStatusHistory
+ * @description Exporte l'historique des statuts de toutes les demandes au format CSV.
+ * @param {object} query - Les paramètres de requête pour le filtrage (e.g. requestId, status).
  */
-async function exportStatusHistoryPdf(req, res, next) {
+export const exportStatusHistory = async (query) => {
   try {
-    const requestId = parseInt(req.params.id, 10);
-    const history = await prisma.statusHistory.findMany({
-      where: { requestId },
-      orderBy: { timestamp: 'asc' },
-    });
-    // Set response headers for PDF attachment
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="status_history_${requestId}.pdf"`
-    );
+    const where = {};
+    if (query.requestId) where.requestId = parseInt(query.requestId, 10);
+    if (query.status) where.status = query.status;
 
-    const doc = new PDFDocument({ margin: 50 });
-    doc.pipe(res);
-    doc.fontSize(16).text(`Status History for Request #${requestId}`, { align: 'center' });
-    doc.moveDown();
-    // Add each history entry
-    history.forEach(entry => {
-      doc.fontSize(12)
-        .text(`- ${entry.status}`, { continued: true })
-        .text(` on ${entry.timestamp.toISOString()}`, { align: 'right' });
-      // Author not tracked; omitted
-      doc.moveDown(0.5);
+    if (query.from || query.to) {
+      where.timestamp = {};
+      if (query.from) where.timestamp.gte = new Date(query.from);
+      if (query.to) where.timestamp.lte = new Date(query.to);
+    }
+    
+    const rows = await prisma.statusHistory.findMany({ 
+      where, 
+      orderBy: { timestamp: 'desc' } 
     });
-    doc.end();
-  } catch (err) {
-    next(err);
+
+    // Définir les en-têtes CSV
+    const header = ['id', 'requestId', 'status', 'timestamp'];
+    
+    // Mapper les données des lignes
+    const data = rows.map(r => ({
+      id: r.id,
+      requestId: r.requestId,
+      status: r.status,
+      timestamp: r.timestamp.toISOString(),
+    }));
+    
+    // Générer le CSV
+    const csvContent = toCsv(header, data);
+    const filename = `status-history-${new Date().toISOString().slice(0, 10)}.csv`;
+
+    return { csv: csvContent, filename };
+  } catch (error) {
+    console.error('Erreur lors de la génération du fichier CSV pour l\'historique des statuts:', error);
+    throw new HttpError(500, 'Erreur interne du serveur lors de l\'exportation CSV.');
   }
-}
+};
 
 /**
- * GET /requests/:id/status-history/export/csv
- * Generate and stream a CSV file of status history entries.
+ * @name exportStatusHistoryController
+ * @description Contrôleur pour gérer les requêtes d'exportation de l'historique des statuts.
+ * @param {object} req - L'objet de requête Express.
+ * @param {object} res - L'objet de réponse Express.
+ * @param {function} next - Le middleware suivant.
  */
-async function exportStatusHistoryCsv(req, res, next) {
-  try {
-    const requestId = parseInt(req.params.id, 10);
-    const history = await prisma.statusHistory.findMany({
-      where: { requestId },
-      orderBy: { timestamp: 'asc' },
-    });
-    // CSV header
-    let csv = 'status,timestamp,author\n';
-    history.forEach(entry => {
-      const author = 'N/A'; // Author not tracked
-      csv += `${entry.status},${entry.timestamp.toISOString()},${author}\n`;
-    });
-    // Set response headers for CSV attachment
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="status_history_${requestId}.csv"`
-    );
-    res.send(csv);
-  } catch (err) {
-    next(err);
-  }
-}
-
-module.exports = { exportStatusHistoryPdf, exportStatusHistoryCsv };

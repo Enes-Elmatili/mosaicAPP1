@@ -1,66 +1,134 @@
-// backend/server.js
-require('dotenv').config(); // ⬅️ charge .env AVANT toute lecture de process.env
+import { createServer } from "http";
+import { Server } from "socket.io";
+import dotenv from "dotenv";
+import cors from "cors"; // ✅ ajout
+import app from "./app.js"; // 👈 on réutilise ton app configurée
+import prisma from "./db/prisma.js";
 
-const http = require('http');
-const app = require('./app');
+dotenv.config();
 
-const csv = (v) => (v ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
-const fromEnv = csv(process.env.ALLOWED_ORIGINS);
-const ALLOWED = fromEnv.length ? fromEnv : ['http://localhost:5173']; // ⬅️ vrai fallback si .env absent
-const PORT = process.env.PORT || 3000;
+// ────────────── PATCH CORS EXPRESS ──────────────
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  process.env.FRONTEND_URL, // en prod si défini
+].filter(Boolean);
 
-// (Optionnel) cron jobs
-try { require('./cron/alertScheduler'); } catch { /* no-op en dev */ }
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true); // autorise Postman / curl
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error("Not allowed by CORS: " + origin));
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
 
-const server = http.createServer(app);
+// ────────────── HTTP + SOCKET.IO ──────────────
+const server = createServer(app);
 
-// Socket.io: mêmes origines que l'API (pas de '*')
-const { Server } = require('socket.io');
 const io = new Server(server, {
   cors: {
-    origin: ALLOWED,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error("Not allowed by Socket.IO CORS: " + origin));
+    },
+    methods: ["GET", "POST"],
     credentials: true,
-    methods: ['GET','POST','PATCH','PUT','DELETE','OPTIONS'],
-    allowedHeaders: ['Content-Type','Authorization','x-master-key','x-request-id'],
   },
 });
 
-// Expose io aux contrôleurs
-app.set('io', io);
+// ────────────── SOCKET.IO ──────────────
+const providerSockets = new Map();
 
-// Logs socket
-io.on('connection', (socket) => {
-  console.log(JSON.stringify({
-    t: new Date().toISOString(),
-    type: 'socket_connect',
-    id: socket.id,
-    origin: socket.handshake.headers.origin || null
-  }));
-  socket.on('disconnect', (reason) => {
-    console.log(JSON.stringify({
-      t: new Date().toISOString(),
-      type: 'socket_disconnect',
-      id: socket.id,
-      reason
-    }));
+io.on("connection", (socket) => {
+  console.log(`[SOCKET] ${socket.id} connected`);
+
+  // 👉 provider:join
+  socket.on("provider:join", async ({ providerId }) => {
+    providerSockets.set(providerId, socket.id);
+    console.log(`[PROVIDER] ${providerId} joined`);
+
+    try {
+      await prisma.provider.update({
+        where: { id: providerId },
+        data: { status: "READY" },
+      });
+
+      // 🔥 broadcast à tous
+      io.emit("provider:status_update", { providerId, status: "READY" });
+    } catch (err) {
+      console.error("Error updating status:", err);
+    }
+  });
+
+  // 👉 provider:set_status
+  socket.on("provider:set_status", async ({ providerId, status }) => {
+    console.log(`[STATUS] ${providerId} → ${status}`);
+
+    try {
+      await prisma.provider.update({
+        where: { id: providerId },
+        data: { status },
+      });
+
+      // 🔥 broadcast à tous
+      io.emit("provider:status_update", { providerId, status });
+    } catch (err) {
+      console.error("Error updating status:", err);
+    }
+  });
+
+  // 👉 new_request
+  socket.on("new_request", async ({ requestId, providerId }) => {
+    console.log(`[REQUEST] New request ${requestId} → provider ${providerId}`);
+
+    const targetSocket = providerSockets.get(providerId);
+    if (targetSocket) {
+      // 🔥 envoyer seulement au provider ciblé
+      io.to(targetSocket).emit("new_request", { requestId });
+    } else {
+      console.warn(`[REQUEST] Provider ${providerId} non connecté`);
+    }
+  });
+
+  // 👉 disconnect
+  socket.on("disconnect", async () => {
+    const providerId = [...providerSockets.entries()].find(
+      ([, sid]) => sid === socket.id
+    )?.[0];
+
+    if (providerId) {
+      providerSockets.delete(providerId);
+      console.log(`[DISCONNECT] ${providerId} disconnected`);
+
+      try {
+        await prisma.provider.update({
+          where: { id: providerId },
+          data: { status: "OFFLINE" },
+        });
+
+        // 🔥 broadcast à tous
+        io.emit("provider:status_update", { providerId, status: "OFFLINE" });
+      } catch (err) {
+        console.error("Error updating disconnect:", err);
+      }
+    }
   });
 });
 
+// ────────────── LANCEMENT ──────────────
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`CORS allowed origins: ${ALLOWED.join(', ')}`);
-  console.log(`[BOOT] MASTER_KEY=${process.env.MASTER_KEY} VITE_MASTER_KEY=${process.env.VITE_MASTER_KEY}`);
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });
 
-// Arrêt propre
-const shutdown = (signal) => () => {
-  console.log(`[${signal}] received. Shutting down…`);
-  io.close(() => {
-    server.close(() => {
-      console.log('HTTP server closed.');
-      process.exit(0);
-    });
-  });
-};
-process.on('SIGINT', shutdown('SIGINT'));
-process.on('SIGTERM', shutdown('SIGTERM'));
+export { io, server };

@@ -1,288 +1,209 @@
-const express = require('express');
-const path = require('path');
-const fs = require('fs/promises');
-const crypto = require('crypto');
-const { HttpError } = require('../middleware/httpError');
-const { authenticateFlexible } = require('../middleware/authenticate');
-const rateLimit = require('express-rate-limit');
-const { z } = require('zod');
-const { validateMimeAndSize } = require('../services/utils');
-const sizeOf = require('image-size');
-const multer = require('multer');
+// backend/routes/requests.js
+import { Router } from "express";
+import prisma from "../db/prisma.js";
+import {
+  buildGeoFieldsForRequest,
+  sqlBbox,
+  shortlistByRadius,
+} from "../../src/lib/geo.js";
 
-const router = express.Router();
-
-// Controllers for maintenance requests and status management
-const { createRequest } = require('../controllers/requestsController');
-const { updateStatus, getStatusHistory } = require('../controllers/statusController');
-const { exportStatusHistoryPdf, exportStatusHistoryCsv } = require('../controllers/statusExportController');
-router.use(authenticateFlexible);
-
-// Rate limit: max requests per hour per user
-const createRequestLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_REQUESTS_PER_HOUR) || 5,
-  keyGenerator: req => req.userId,
-  handler: (_req, res) => res.status(429).json({ error: 'error.rate_limit_exceeded' }),
-});
-
-// File upload setup
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: (parseInt(process.env.MAX_UPLOAD_MB) || 5) * 1024 * 1024 } });
-
-// Schemas for MaintenanceRequest
-const ServiceType = z.enum(['plumbing', 'electrical', 'hvac', 'general', 'other']);
-const Priority = z.enum(['low', 'medium', 'high']);
-const createRequestSchema = z.object({
-  propertyId: z.union([z.string(), z.number()]).transform((v) => String(v)),
-  serviceType: ServiceType,
-  categoryId: z.string().optional(),
-  subcategoryId: z.string().optional(),
-  description: z.string().min(1),
-  photos: z.array(z.string().url()).optional(),
-  priority: Priority.optional(),
-});
-const updateRequestSchema = z.object({
-  propertyId: z.union([z.string(), z.number()]).transform((v) => String(v)).optional(),
-  serviceType: ServiceType.optional(),
-  categoryId: z.string().optional(),
-  subcategoryId: z.string().optional(),
-  description: z.string().min(1).optional(),
-  photos: z.array(z.string().url()).optional(),
-  priority: Priority.optional(),
-  status: z.string().optional(),
-});
-
-// Helpers: backward compatibility for legacy clientInfo JSON (read-only)
-function unpackClientInfo(clientInfo) {
-  try { return clientInfo ? JSON.parse(clientInfo) : {}; } catch { return {}; }
-}
-const toEnumPriority = (p) => (p ? String(p).toLowerCase() === 'high' ? 'HIGH' : String(p).toLowerCase() === 'low' ? 'LOW' : 'MEDIUM' : undefined);
+const router = Router();
 
 /**
- * POST /requests - create a maintenance service request
+ * POST /api/requests
+ * Crée une demande (clientEmail + géoloc + provider matching)
  */
-router.post('/', createRequestLimiter, async (req, res, next) => {
+router.post("/", async (req, res) => {
   try {
-    const { prisma } = require('../db/prisma');
-    const parsed = createRequestSchema.parse(req.body);
-    const record = await prisma.maintenanceRequest.create({
-      data: {
-        clientId: req.userId,
-        propertyId: parsed.propertyId,
-        serviceType: parsed.serviceType,
-        description: parsed.description,
-        priority: toEnumPriority(parsed.priority),
-        categoryId: parsed.categoryId,
-        subcategoryId: parsed.subcategoryId,
-        photos: parsed.photos || [],
-        urgent: false,
-        providerId: 'provider_tbd',
-        providerName: 'TBD',
-        providerDistanceKm: 0,
-        contractUrl: '',
+    const {
+      clientEmail,
+      categoryName,
+      subcategorySlug,
+      serviceType,
+      description,
+      address,
+      lat,
+      lng,
+      clientInfo = null,
+      urgent = false,
+      preferredTimeStart = null,
+      preferredTimeEnd = null,
+      searchRadiusKm = 15,
+      priority = null,
+      photos = [],
+    } = req.body || {};
+
+    // validations minimales
+    if (
+      !clientEmail ||
+      !categoryName ||
+      !subcategorySlug ||
+      !serviceType ||
+      !description ||
+      !address
+    ) {
+      return res.status(400).json({
+        error:
+          "Requis: clientEmail, categoryName, subcategorySlug, serviceType, description, address",
+      });
+    }
+
+    const latN = Number(lat),
+      lngN = Number(lng);
+    if (!Number.isFinite(latN) || !Number.isFinite(lngN)) {
+      return res.status(400).json({ error: "lat & lng doivent être numériques" });
+    }
+
+    // Client
+    const client = await prisma.user.findUnique({
+      where: { email: clientEmail },
+    });
+    if (!client) return res.status(400).json({ error: "clientEmail introuvable" });
+
+    // Catégorie + sous-catégorie
+    const category = await prisma.category.findUnique({
+      where: { name: categoryName },
+    });
+    if (!category)
+      return res.status(400).json({ error: `Catégorie inconnue: ${categoryName}` });
+
+    const sub = await prisma.subcategory.findFirst({
+      where: { categoryId: category.id, slug: subcategorySlug },
+    });
+    if (!sub)
+      return res
+        .status(400)
+        .json({ error: `Sous-catégorie inconnue: ${subcategorySlug}` });
+
+    // Geohash
+    const { geohash } = buildGeoFieldsForRequest(latN, lngN, {
+      geohashPrecision: 7,
+    });
+
+    // Shortlist prestataires proches
+    const { minLat, maxLat, minLng, maxLng } = sqlBbox(
+      latN,
+      lngN,
+      Number(searchRadiusKm)
+    );
+    const candidates = await prisma.provider.findMany({
+      where: {
+        lat: { gte: minLat, lte: maxLat },
+        lng: { gte: minLng, lte: maxLng },
       },
+      take: 300,
     });
-    // Merge any legacy values from clientInfo if present (read-only)
-    const extras = unpackClientInfo(record.clientInfo);
-    const out = {
-      ...record,
-      priority: record.priority || (extras.priority && toEnumPriority(extras.priority)),
-      categoryId: record.categoryId || extras.categoryId,
-      subcategoryId: record.subcategoryId || extras.subcategoryId,
-      photos: (record.photos && Array.isArray(record.photos) ? record.photos : (extras.photos || [])),
-    };
-    res.status(201).json(out);
-  } catch (err) {
-    if (err?.issues) return res.status(400).json({ error: 'validation_error', details: err.issues });
-    next(err);
+    const nearby = shortlistByRadius(candidates, latN, lngN, Number(searchRadiusKm)).sort(
+      (a, b) =>
+        (b.rankScore ?? 0) - (a.rankScore ?? 0) || a.distanceKm - b.distanceKm
+    );
+    const chosen = nearby[0] ?? null;
+
+    // Création Request
+    const created = await prisma.request.create({
+      data: {
+        clientId: client.id,
+        propertyId: null,
+        categoryId: category.id,
+        subcategoryId: sub.id,
+        serviceType,
+        description,
+        clientInfo,
+        urgent: !!urgent,
+        providerId: chosen?.id ?? null,
+        providerDistanceKm: chosen?.distanceKm ?? 0,
+        contractUrl: null,
+        address,
+        lat: latN,
+        lng: lngN,
+        geohash,
+        preferredTimeStart,
+        preferredTimeEnd,
+        priority: priority?.toUpperCase?.() || null,
+        photos,
+        status: "PUBLISHED",
+      },
+      include: { provider: true, category: true, subcategory: true },
+    });
+
+    // 🔥 notify via Socket.IO
+    const io = req.app.get("io");
+    io.emit("new-request", created);
+
+    return res.status(201).json({
+      request: created,
+      assignedProvider: chosen
+        ? { id: chosen.id, name: chosen.name, distanceKm: chosen.distanceKm }
+        : null,
+    });
+  } catch (e) {
+    console.error("POST /requests error", e);
+    return res.status(500).json({ error: "internal error" });
   }
 });
 
-// GET /api/requests - list requests for client
 /**
- * GET /requests - list or filter maintenance requests by status
- * Query param: status (optional)
+ * GET /api/requests
  */
-router.get('/', async (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
-    const { prisma } = require('../db/prisma');
-    const filter = { clientId: req.userId };
-    if (req.query.status) filter.status = String(req.query.status);
-    if (req.query.propertyId) filter.propertyId = String(req.query.propertyId);
-    if (req.query.serviceType) filter.serviceType = String(req.query.serviceType);
-    // Pagination & sorting
-    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
-    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '10', 10), 1), 50);
-    const sortBy = ['createdAt', 'updatedAt', 'status'].includes(String(req.query.sortBy)) ? String(req.query.sortBy) : 'createdAt';
-    const order = String(req.query.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
-    const total = await prisma.maintenanceRequest.count({ where: filter });
-    const requests = await prisma.maintenanceRequest.findMany({
-      where: filter,
-      orderBy: { [sortBy]: order },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+    const requests = await prisma.request.findMany({
+      orderBy: { createdAt: "desc" },
     });
-    const items = requests.map((r) => {
-      const extras = unpackClientInfo(r.clientInfo);
-      return {
-        ...r,
-        priority: r.priority || (extras.priority && toEnumPriority(extras.priority)),
-        categoryId: r.categoryId || extras.categoryId,
-        subcategoryId: r.subcategoryId || extras.subcategoryId,
-        photos: (r.photos && Array.isArray(r.photos) ? r.photos : (extras.photos || [])),
-      };
-    });
-    res.json({ items, total, page, pageSize });
+    res.json({ items: requests, total: requests.length });
   } catch (err) {
     next(err);
   }
 });
 
-// GET /api/requests/:id - get request details for client
-router.get('/:id', async (req, res, next) => {
+/**
+ * GET /api/requests/:id
+ */
+router.get("/:id", async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id);
-    const { prisma } = require('../db/prisma');
-    const request = await prisma.maintenanceRequest.findFirst({
-      where: { id, clientId: req.userId },
+    const request = await prisma.request.findUnique({
+      where: { id: Number(req.params.id) },
     });
-    if (!request) throw new HttpError(404, 'Request not found');
-    const extras = unpackClientInfo(request.clientInfo);
-    res.json({
-      ...request,
-      priority: request.priority || (extras.priority && toEnumPriority(extras.priority)),
-      categoryId: request.categoryId || extras.categoryId,
-      subcategoryId: request.subcategoryId || extras.subcategoryId,
-      photos: (request.photos && Array.isArray(request.photos) ? request.photos : (extras.photos || [])),
-    });
+    if (!request) return res.status(404).json({ error: "Request not found" });
+    res.json(request);
   } catch (err) {
     next(err);
   }
 });
 
-// POST /requests/:id/status - update request status and log history
-const { requireStatusAuth } = require('../middleware/authorizeStatusChange');
-router.post('/:id/status', requireStatusAuth, updateStatus);
-
-// PATCH /requests/:id - partial update (description, serviceType, etc.)
-router.patch('/:id', async (req, res, next) => {
+/**
+ * PATCH /api/requests/:id
+ */
+router.patch("/:id", async (req, res, next) => {
   try {
-    const requestId = parseInt(req.params.id, 10);
-    const { prisma } = require('../db/prisma');
-    const existing = await prisma.maintenanceRequest.findFirst({ where: { id: requestId, clientId: req.userId } });
-    if (!existing) throw new HttpError(404, 'Request not found');
-    const parsed = updateRequestSchema.parse(req.body);
-    const prev = unpackClientInfo(existing.clientInfo);
-    const data = {};
-    if (parsed.propertyId !== undefined) data.propertyId = parsed.propertyId;
-    if (parsed.serviceType !== undefined) data.serviceType = parsed.serviceType;
-    if (parsed.description !== undefined) data.description = parsed.description;
-    if (parsed.status !== undefined) data.status = parsed.status;
-    if (parsed.priority !== undefined) data.priority = toEnumPriority(parsed.priority);
-    if (parsed.categoryId !== undefined) data.categoryId = parsed.categoryId;
-    if (parsed.subcategoryId !== undefined) data.subcategoryId = parsed.subcategoryId;
-    if (parsed.photos !== undefined) data.photos = parsed.photos;
-    const updated = await prisma.maintenanceRequest.update({ where: { id: requestId }, data });
-    const extras = unpackClientInfo(updated.clientInfo);
-    res.json({
-      ...updated,
-      priority: updated.priority || (extras.priority && toEnumPriority(extras.priority)),
-      categoryId: updated.categoryId || extras.categoryId,
-      subcategoryId: updated.subcategoryId || extras.subcategoryId,
-      photos: (updated.photos && Array.isArray(updated.photos) ? updated.photos : (extras.photos || [])),
+    const updated = await prisma.request.update({
+      where: { id: Number(req.params.id) },
+      data: req.body,
     });
+
+    const io = req.app.get("io");
+    io.emit("request-updated", updated);
+
+    res.json(updated);
   } catch (err) {
-    if (err?.issues) return res.status(400).json({ error: 'validation_error', details: err.issues });
     next(err);
   }
 });
 
-// DELETE /requests/:id
-router.delete('/:id', async (req, res, next) => {
+/**
+ * DELETE /api/requests/:id
+ */
+router.delete("/:id", async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    const { prisma } = require('../db/prisma');
-    const existing = await prisma.maintenanceRequest.findFirst({ where: { id, clientId: req.userId } });
-    if (!existing) throw new HttpError(404, 'Request not found');
-    await prisma.maintenanceRequest.delete({ where: { id } });
+    await prisma.request.delete({ where: { id: Number(req.params.id) } });
+
+    const io = req.app.get("io");
+    io.emit("request-deleted", { id: Number(req.params.id) });
+
     res.status(204).end();
   } catch (err) {
     next(err);
   }
 });
 
-/**
- * GET /requests/:id/status-history - get status change history
- */
-router.get('/:id/status-history', getStatusHistory);
-
-/**
- * GET /requests/:id/status-history/export/pdf - download status history as PDF
- */
-router.get('/:id/status-history/export/pdf', exportStatusHistoryPdf);
-
-/**
- * GET /requests/:id/status-history/export/csv - download status history as CSV
- */
-router.get('/:id/status-history/export/csv', exportStatusHistoryCsv);
-// POST /api/requests/:id/photos - upload photo for a request
-router.post('/:id/photos', upload.single('file'), async (req, res, next) => {
-  try {
-    const requestId = parseInt(req.params.id);
-    const { prisma } = require('../db/prisma');
-    const request = await prisma.maintenanceRequest.findUnique({ where: { id: requestId } });
-    if (!request || request.clientId !== req.userId) {
-      throw new HttpError(403, 'error.forbidden');
-    }
-    const file = req.file;
-    if (!file) throw new HttpError(400, 'error.no_file');
-    validateMimeAndSize(file);
-    const uploadDir = process.env.LOCAL_UPLOAD_DIR || 'uploads';
-    const ext = file.mimetype === 'image/png' ? 'png' : 'jpg';
-    const filename = `${crypto.randomUUID()}.${ext}`;
-    const dir = path.join(process.cwd(), uploadDir, 'requests', String(requestId));
-    await fs.mkdir(dir, { recursive: true });
-    const filepath = path.join(dir, filename);
-    await fs.writeFile(filepath, file.buffer);
-    const dimensions = sizeOf(file.buffer);
-    const url = `/uploads/requests/${requestId}/${filename}`;
-    // Append to clientInfo.photos
-    const photos = Array.isArray(request.photos) ? request.photos.slice() : [];
-    photos.push(url);
-    await prisma.maintenanceRequest.update({ where: { id: requestId }, data: { photos } });
-    console.log('Photo uploaded', { userId: req.userId, requestId, size: file.size, ip: req.ip });
-    res.status(201).json({ url, width: dimensions.width, height: dimensions.height, size: file.size, mime: file.mimetype });
-  } catch (err) {
-    if (err.status && err.message) {
-      return res.status(err.status).json({ error: err.message });
-    }
-    next(err);
-  }
-});
-
-// DELETE /api/requests/:id/photos/:filename - remove a photo
-router.delete('/:id/photos/:filename', async (req, res, next) => {
-  try {
-    const requestId = parseInt(req.params.id);
-    const fileParam = req.params.filename;
-    const { prisma } = require('../db/prisma');
-    const request = await prisma.maintenanceRequest.findUnique({ where: { id: requestId } });
-    if (!request || request.clientId !== req.userId) throw new HttpError(403, 'error.forbidden');
-    const uploadDir = process.env.LOCAL_UPLOAD_DIR || 'uploads';
-    const rel = path.join('requests', String(requestId), fileParam);
-    const filepath = path.join(process.cwd(), uploadDir, rel);
-    await fs.unlink(filepath).catch(() => {});
-    const extras = unpackClientInfo(request.clientInfo);
-    const photos = (Array.isArray(extras.photos) ? extras.photos : []).filter((u) => !u.endsWith('/' + fileParam));
-    const newInfo = packClientInfo({ ...extras, photos });
-    await prisma.maintenanceRequest.update({ where: { id: requestId }, data: { clientInfo: newInfo } });
-    res.status(204).end();
-  } catch (err) {
-    if (err.status && err.message) {
-      return res.status(err.status).json({ error: err.message });
-    }
-    next(err);
-  }
-});
-
-module.exports = router;
+export default router;

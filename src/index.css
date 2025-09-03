@@ -1,4 +1,3 @@
-/* Importation de la police Inter pour une typographie élégante */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
 @tailwind base;
@@ -9,10 +8,55 @@
   --font-sans: 'Inter', sans-serif;
 }
 
-/* Styles globaux d'adaptation à l'esprit Airbnb */
+/* 🌐 Global */
 body {
-  @apply bg-white font-sans text-gray-800 antialiased;
+  @apply bg-neutral-100 text-neutral-900 font-sans antialiased transition-colors duration-300;
 }
-button {
-  @apply bg-primary text-white px-4 py-2 rounded-full hover:bg-opacity-90 transition;
+
+a {
+  @apply transition-colors duration-200;
+}
+
+/* 🚀 Uber/Revolut buttons */
+.btn {
+  @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-semibold transition-all duration-200;
+}
+.btn-primary {
+  @apply bg-black text-white hover:bg-neutral-800 active:scale-[.98] focus:ring-4 focus:ring-secondary/30;
+}
+.btn-secondary {
+  @apply bg-gradient-to-r from-secondary via-secondary-purple to-secondary-pink text-white shadow-md hover:opacity-90 active:scale-[.98] focus:ring-4 focus:ring-secondary/30;
+}
+.btn-outline {
+  @apply border border-neutral-300 text-neutral-700 hover:bg-neutral-100 active:scale-[.98] focus:ring-2 focus:ring-secondary;
+}
+.dark .btn-outline {
+  @apply border-neutral-600 text-neutral-200 hover:bg-neutral-800;
+}
+
+/* 🃏 Cards */
+.card {
+  @apply bg-white rounded-xl shadow-card p-6 transition-colors duration-300;
+}
+.dark .card {
+  @apply bg-neutral-800 text-neutral-100 shadow-strong;
+}
+
+/* ✍️ Inputs */
+.input {
+  @apply border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-secondary transition-colors duration-200;
+}
+.input:disabled {
+  @apply bg-neutral-100 text-neutral-400 cursor-not-allowed;
+}
+.dark .input {
+  @apply border-neutral-600 bg-neutral-900 text-neutral-100 placeholder-neutral-400;
+}
+.dark .input:disabled {
+  @apply bg-neutral-800 text-neutral-500;
+}
+
+/* 🌙 Dark mode */
+.dark body {
+  @apply bg-neutral-900 text-neutral-100;
 }

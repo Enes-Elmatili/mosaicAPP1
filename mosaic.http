@@ -1,0 +1,105 @@
+### Health check
+GET http://localhost:3000/api/health
+
+
+### Admin Login (si tu veux regénérer un token)
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@mosaic.com",
+  "password": "Mosaic@2025"
+}
+
+
+### Me (profil connecté avec ton token)
+GET http://localhost:3000/api/auth/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTg2MDE5LCJleHAiOjE3NTcxOTA4MTl9._AsBBtDbZ-z494n-hnI88_Hlot9eB2BSgCJldzu1_1E
+
+
+### List Users
+GET http://localhost:3000/api/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTY0ODY0LCJleHAiOjE3NTcxNjk2NjR9.D9uXwEvUIjnrVQHO_flYXNaeznlKJwWuT3OGAbm7Mww
+
+
+### Create Client User
+POST http://localhost:3000/api/users
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTY0ODY0LCJleHAiOjE3NTcxNjk2NjR9.D9uXwEvUIjnrVQHO_flYXNaeznlKJwWuT3OGAbm7Mww
+
+{
+  "email": "client.demo{{$timestamp}}@test.com",
+  "password": "mosaic123!",
+  "role": "CLIENT"
+}
+
+
+### Create Provider User
+POST http://localhost:3000/api/users
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTY0ODY0LCJleHAiOjE3NTcxNjk2NjR9.D9uXwEvUIjnrVQHO_flYXNaeznlKJwWuT3OGAbm7Mww
+
+{
+  "email": "provider.demo{{$timestamp}}@test.com",
+  "password": "mosaic123!",
+  "role": "PROVIDER"
+}
+
+
+### Create Request
+POST http://localhost:3000/api/requests
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTY0ODY0LCJleHAiOjE3NTcxNjk2NjR9.D9uXwEvUIjnrVQHO_flYXNaeznlKJwWuT3OGAbm7Mww
+
+{
+  "title": "Fix sink",
+  "lat": 33.5731,
+  "lng": -7.5898,
+  "priority": "HIGH"
+}
+
+
+### Update Request Status
+PATCH http://localhost:3000/api/requests/{{requestId}}/status
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTY0ODY0LCJleHAiOjE3NTcxNjk2NjR9.D9uXwEvUIjnrVQHO_flYXNaeznlKJwWuT3OGAbm7Mww
+
+{
+  "status": "IN_PROGRESS"
+}
+
+
+### Create Review
+POST http://localhost:3000/api/reviews?requestId={{requestId}}
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTY0ODY0LCJleHAiOjE3NTcxNjk2NjR9.D9uXwEvUIjnrVQHO_flYXNaeznlKJwWuT3OGAbm7Mww
+
+{
+  "rating": 5,
+  "comment": "Great service"
+}
+
+
+### Credit Wallet
+POST http://localhost:3000/api/wallet/credit
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTY0ODY0LCJleHAiOjE3NTcxNjk2NjR9.D9uXwEvUIjnrVQHO_flYXNaeznlKJwWuT3OGAbm7Mww
+
+{
+  "amount": 100
+}
+
+
+### Debit Wallet
+POST http://localhost:3000/api/wallet/debit
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTY0ODY0LCJleHAiOjE3NTcxNjk2NjR9.D9uXwEvUIjnrVQHO_flYXNaeznlKJwWuT3OGAbm7Mww
+
+{
+  "amount": 50
+}
+
+
+### Export Requests (CSV)
+GET http://localhost:3000/api/admin/requests/export
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWV4NHI2ZjkwMDAza3M0OGI0Z2Z2cjlyIiwiZW1haWwiOiJhZG1pbkBtb3NhaWMuY29tIiwicm9sZXMiOlsiQURNSU4iXSwiaWF0IjoxNzU2NTY0ODY0LCJleHAiOjE3NTcxNjk2NjR9.D9uXwEvUIjnrVQHO_flYXNaeznlKJwWuT3OGAbm7Mww

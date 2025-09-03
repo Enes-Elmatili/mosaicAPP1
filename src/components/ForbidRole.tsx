@@ -1,9 +1,8 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 export default function ForbidRole({ role }:{role:string}){
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
-  if (loading) return <div>Chargement…</div>;
   const isDev = import.meta.env.MODE !== 'production';
   const hasMaster = !!(localStorage.getItem('mosaic_master_key') || localStorage.getItem('VITE_MASTER_KEY'));
   if (isDev && hasMaster) return <Outlet />;

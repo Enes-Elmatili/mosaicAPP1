@@ -1,38 +1,80 @@
-const { Router } = require('express');
-const { authenticate } = require('../middleware/authenticate');
-const { prisma } = require('../db/prisma');
-const { HttpError } = require('../middleware/httpError');
+// backend/routes/me.js (ESM)
+import { Router } from "express";
+import { authenticate } from "../middleware/authenticate.js";
+import { prisma } from "../db/prisma.js";
+import { HttpError } from "../middleware/httpError.js";
 
 const router = Router();
+const ALLOWED_ROLES = new Set(["ADMIN", "PROVIDER", "CLIENT"]);
 
 /**
  * GET /api/me
- * Returns current user ID, roles and effectivePermissions.
+ * Retourne l’utilisateur courant avec rôles & permissions
+ * Réponse: { id, email, roles: string[], permissions: string[] }
  */
-router.get('/', authenticate, async (req, res, next) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const userId = req.userId;
-    // Fetch roles and their permissions
+    if (!userId) throw new HttpError(401, "Unauthenticated");
+
+    // 1) Récupération utilisateur
+    let user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      // fallback sur les infos du token
+      const fromToken = req.user || {};
+      user = { id: userId, email: fromToken.email || undefined };
+    }
+
+    // 2) Rôles et permissions
     const userRoles = await prisma.userRole.findMany({
       where: { userId },
-      include: {
-        role: { include: { permissions: { include: { permission: true } } } },
+      select: {
+        role: {
+          select: {
+            name: true,
+            permissions: { select: { permission: { select: { key: true } } } },
+          },
+        },
       },
     });
-    if (!userRoles) {
-      throw new HttpError(401, 'User not found');
+
+    let roles = (userRoles || [])
+      .map((ur) => (ur.role?.name || "").toUpperCase())
+      .filter((r) => ALLOWED_ROLES.has(r));
+
+    if (roles.length === 0 && Array.isArray(req.user?.roles)) {
+      roles = req.user.roles
+        .map((r) => (r || "").toUpperCase())
+        .filter((r) => ALLOWED_ROLES.has(r));
     }
-    const roles = userRoles.map((ur) => ur.role.name);
-    const permSet = new Set();
-    userRoles.forEach((ur) => {
-      ur.role.permissions.forEach((rp) => {
-        permSet.add(rp.permission.key);
-      });
+
+    const permSet = new Set(
+      (userRoles || []).flatMap((ur) =>
+        (ur.role?.permissions || []).map((rp) => rp.permission.key)
+      )
+    );
+
+    // 3) Headers anti-cache
+    res.set({
+      "Cache-Control": "no-store",
+      Pragma: "no-cache",
     });
-    res.json({ id: userId, roles, effectivePermissions: Array.from(permSet) });
+
+    // 4) Réponse finale
+    return res.json({
+      id: user.id,
+      email: user.email,
+      roles,                           // ex: ["ADMIN","CLIENT"]
+      role: roles[0] || null,          // rôle principal
+      permissions: Array.from(permSet) // ex: ["REQUEST_CREATE","REQUEST_READ"]
+    });
   } catch (e) {
     next(e);
   }
 });
 
-module.exports = router;
+export default router;

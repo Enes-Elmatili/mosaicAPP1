@@ -4,6 +4,18 @@
 
 **Application web et mobile de gestion immobilière pour les MRE**
 
+## Nettoyage des doublons (2025-08)
+
+- Source d’auth unique: `src/context/AuthContext.tsx` gère login/logout et `/api/me`.
+- Gardes de routes: `src/components/RequireAuth.tsx` et `src/components/RequirePermission.tsx` (désormais branché sur le contexte d’auth).
+- Supprimés (doublons non utilisés):
+  - `src/components/Auth/*` (anciens context/guards/RequireAuth)
+  - `src/components/Unauthorized.tsx` (remplacé par `src/pages/common/UnauthorizedPage.tsx`)
+  - Anciens composants JSX non utilisés: `src/components/{Accordion.jsx,Header.jsx,Footer.jsx,Layout.jsx,Hero.jsx,HowItWorks.jsx,Testimonials.jsx}`
+  - Ancien store d’auth: `src/store/auth.ts` (confondait avec le contexte; garder `src/store/authStore.ts` pour tests master key)
+
+Impact: le routage et les vérifications de permissions s’appuient désormais uniquement sur le contexte d’auth. Réduction des ambiguïtés et imports cohérents.
+
 ## Architecture générale
 
 Le projet MOSAÏC s'articule autour de plusieurs modules indépendants :
@@ -246,3 +258,19 @@ ROM`, `STRIPE_SECRET_KEY`, `SUCCESS_URL/CANCEL_URL`, `LOCAL_UPLOAD_DIR=uploads`,
 Souhaitez-vous que j’aligne le frontend avec l’API (types, services et formulair
 e des demandes) et que j’expose les contrats statiquement pour débloquer un parc
 ours bout‑à‑bout en local ?
+
+## Authentification (DEV et prod)
+
+- Backend:
+  - `POST /api/auth/login` avec `{ email, password }` (place un cookie `session`).
+  - `GET /api/me` retourne `{ id, email, roles[], permissions[] }`.
+  - Bypass DEV: si `x-master-key` correspond à `MASTER_KEY`/`VITE_MASTER_KEY`, le backend crée une session sans mot de passe.
+- Frontend:
+  - Contexte d’auth: `src/context/AuthContext.tsx` (fourni par `AuthProvider` dans `src/main.tsx`).
+  - Gardes: `RequireAuth` vérifie l’auth, `RequirePermission` vérifie un rôle basique (tenant/owner/provider/admin).
+  - Master key DEV: définir `VITE_MASTER_KEY=...` dans `.env`; certains écrans lisent `localStorage.mosaic_master_key` pour un accès simplifié en dev.
+
+Bonnes pratiques:
+- Utiliser uniquement `AuthContext` pour lire l’utilisateur et l’état de session.
+- Éviter d’importer d’anciens helpers/contexts supprimés sous `src/components/Auth/*`.
+- Pour le login UI, appeler `/api/auth/login` puis rafraîchir l’utilisateur via `/api/me`.
