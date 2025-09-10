@@ -10,6 +10,11 @@ import prisma from "../db/prisma.js";
 export const providerSockets = new Map();
 export let io = null;
 
+// Permet d'attacher un serveur Socket.IO existant (utilisé par server.js)
+export function attachIo(instance) {
+  io = instance;
+}
+
 // Normalisation des statuts
 function normalizeIn(status) {
   if (status === "ON_MISSION") return "BUSY";

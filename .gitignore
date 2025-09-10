@@ -6,3 +6,6 @@ prisma/dev.db
 env.local
 # local env file
 .env
+
+*storybook.log
+storybook-static

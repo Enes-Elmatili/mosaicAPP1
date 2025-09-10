@@ -1,26 +1,41 @@
-import { Router } from "express";
-import authenticateFlexible from "../middleware/authenticateFlexible.js";
-import { requireRole } from "../middleware/requireRole.js";
-import { prisma } from "../db/prisma.js";
-import { z } from "zod";
-import { validateBody, validateParams, validateQuery } from "../middleware/validate.js";
+import { Router } from "express"
+import authenticateFlexible from "../middleware/authenticateFlexible.js"
+import { requireRole } from "../middleware/requireRole.js"
+import { prisma } from "../db/prisma.js"
+import { z } from "zod"
+import { validateBody, validateParams, validateQuery } from "../middleware/validate.js"
+import { HttpError } from "../middleware/httpError.js"
 
-const router = Router();
+const router = Router()
 
 // ───────────────────────────────────────────────
 // Schemas Zod
 // ───────────────────────────────────────────────
 const MessageCreateSchema = z.object({
-  recipientId: z.string().uuid(),
+  // Keep recipientId from frontend payload, map to DB field `to`
+  recipientId: z.string().min(1),
   content: z.string().min(1).max(2000),
-});
+})
 
-const RecipientParam = z.object({ recipientId: z.string().uuid() });
+// IDs are cuid() in schema, so don't force UUID
+const RecipientParam = z.object({ recipientId: z.string().min(1) })
 
 const QueryPagination = z.object({
   page: z.string().regex(/^\d+$/).transform(Number).optional(),
   limit: z.string().regex(/^\d+$/).transform(Number).optional(),
-});
+})
+
+// Utility to normalize a DB message to frontend shape
+function toDto(msg) {
+  return {
+    id: msg.id,
+    senderId: msg.from,
+    recipientId: msg.to,
+    text: msg.content,
+    createdAt: msg.createdAt,
+    readAt: msg.readAt ?? null, // schema may not have readAt; default to null
+  }
+}
 
 // ───────────────────────────────────────────────
 // POST /api/messages → envoyer un message
@@ -32,36 +47,34 @@ router.post(
   validateBody(MessageCreateSchema),
   async (req, res, next) => {
     try {
-      const { recipientId, content } = req.body;
+      const { recipientId, content } = req.body
 
       if (recipientId === req.user.id) {
-        return res.status(400).json({ error: "You cannot message yourself" });
+        throw new HttpError(400, "INVALID_RECIPIENT", "Impossible de vous envoyer un message à vous-même")
       }
 
       const msg = await prisma.message.create({
         data: {
-          senderId: req.user.id,
-          recipientId,
+          from: req.user.id,
+          to: recipientId,
           content,
         },
-      });
+      })
 
-      // 🔔 Notifier via socket.io si dispo
-      req.io?.to(recipientId).emit("new-message", {
-        id: msg.id,
-        senderId: msg.senderId,
-        recipientId: msg.recipientId,
-        content: msg.content,
-        createdAt: msg.createdAt,
-      });
+      // 🔔 Notifier via socket.io
+      req.io?.to(recipientId).emit("message:received", toDto(msg))
 
-      res.status(201).json({ success: true, data: msg });
+      res.status(201).json({
+        code: "MESSAGE_SENT",
+        message: "Message envoyé avec succès",
+        data: toDto(msg),
+        requestId: req.id,
+      })
     } catch (e) {
-      console.error("[POST /api/messages]", e);
-      next(e);
+      next(e)
     }
   }
-);
+)
 
 // ───────────────────────────────────────────────
 // GET /api/messages/conversation/:recipientId
@@ -74,30 +87,44 @@ router.get(
   validateQuery(QueryPagination),
   async (req, res, next) => {
     try {
-      const { recipientId } = req.params;
-      const page = req.query.page ?? 1;
-      const limit = Math.min(req.query.limit ?? 50, 200);
-      const skip = (page - 1) * limit;
+      const { recipientId } = req.params
+      const page = req.query.page ?? 1
+      const limit = Math.min(req.query.limit ?? 50, 200)
+      const skip = (page - 1) * limit
 
+      // Vérif: l’utilisateur doit être partie prenante
       const conv = await prisma.message.findMany({
         where: {
           OR: [
-            { senderId: req.user.id, recipientId },
-            { senderId: recipientId, recipientId: req.user.id },
+            { from: req.user.id, to: recipientId },
+            { from: recipientId, to: req.user.id },
           ],
         },
         orderBy: { createdAt: "asc" },
         skip,
         take: limit,
-      });
+      })
 
-      res.json({ success: true, page, limit, data: conv });
+      const total = await prisma.message.count({
+        where: {
+          OR: [
+            { from: req.user.id, to: recipientId },
+            { from: recipientId, to: req.user.id },
+          ],
+        },
+      })
+
+      res.json({
+        code: "CONVERSATION_LOADED",
+        data: conv.map(toDto),
+        meta: { page, limit, total },
+        requestId: req.id,
+      })
     } catch (e) {
-      console.error("[GET /api/messages/conversation/:recipientId]", e);
-      next(e);
+      next(e)
     }
   }
-);
+)
 
 // ───────────────────────────────────────────────
 // GET /api/messages/inbox
@@ -109,27 +136,35 @@ router.get(
   validateQuery(QueryPagination),
   async (req, res, next) => {
     try {
-      const page = req.query.page ?? 1;
-      const limit = Math.min(req.query.limit ?? 20, 100);
-      const skip = (page - 1) * limit;
+      const page = req.query.page ?? 1
+      const limit = Math.min(req.query.limit ?? 20, 100)
+      const skip = (page - 1) * limit
 
       const inbox = await prisma.message.findMany({
-        where: { recipientId: req.user.id },
+        where: { to: req.user.id },
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
-      });
+      })
 
-      res.json({ success: true, page, limit, data: inbox });
+      const total = await prisma.message.count({
+        where: { to: req.user.id },
+      })
+
+      res.json({
+        code: "INBOX_LOADED",
+        data: inbox.map(toDto),
+        meta: { page, limit, total },
+        requestId: req.id,
+      })
     } catch (e) {
-      console.error("[GET /api/messages/inbox]", e);
-      next(e);
+      next(e)
     }
   }
-);
+)
 
 // ───────────────────────────────────────────────
-// GET /api/messages/unread → compteur non lus
+// GET /api/messages/unread
 // ───────────────────────────────────────────────
 router.get(
   "/unread",
@@ -137,23 +172,16 @@ router.get(
   requireRole("CLIENT", "PROVIDER", "ADMIN"),
   async (req, res, next) => {
     try {
-      const count = await prisma.message.count({
-        where: {
-          recipientId: req.user.id,
-          readAt: null,
-        },
-      });
-
-      res.json({ success: true, unread: count });
+      // Schema doesn't track read state → return 0 for now
+      res.json({ code: "UNREAD_COUNT", unread: 0, requestId: req.id })
     } catch (e) {
-      console.error("[GET /api/messages/unread]", e);
-      next(e);
+      next(e)
     }
   }
-);
+)
 
 // ───────────────────────────────────────────────
-// PATCH /api/messages/:id/read → marquer comme lu
+// PATCH /api/messages/:id/read
 // ───────────────────────────────────────────────
 router.patch(
   "/:id/read",
@@ -161,24 +189,17 @@ router.patch(
   requireRole("CLIENT", "PROVIDER", "ADMIN"),
   async (req, res, next) => {
     try {
-      const { id } = req.params;
-
-      const message = await prisma.message.findUnique({ where: { id } });
-      if (!message || message.recipientId !== req.user.id) {
-        return res.status(404).json({ error: "Message not found" });
+      const { id } = req.params
+      const message = await prisma.message.findUnique({ where: { id } })
+      if (!message || message.to !== req.user.id) {
+        throw new HttpError(404, "NOT_FOUND", "Message introuvable")
       }
-
-      const updated = await prisma.message.update({
-        where: { id },
-        data: { readAt: new Date() },
-      });
-
-      res.json({ success: true, data: updated });
+      // No readAt in schema → return current message as-is
+      res.json({ code: "MESSAGE_READ", data: toDto(message), requestId: req.id })
     } catch (e) {
-      console.error("[PATCH /api/messages/:id/read]", e);
-      next(e);
+      next(e)
     }
   }
-);
+)
 
-export default router;
+export default router

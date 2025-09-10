@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShieldAlert, LockKeyhole, Home, LogIn } from 'lucide-react';
-import PageWrapper from '../../components/Layout/PageWrapper';
+import PageWrapper from '../../components/layouts/PageWrapper';
 
 const UnauthorizedPage: React.FC = () => {
   const goHome = () => (window.location.href = '/');

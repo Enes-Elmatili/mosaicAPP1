@@ -13,12 +13,15 @@ import exportRouter from "./export.js";
 import contractsRouter from "./contracts.js";
 import subscriptionRouter from "./subscription.js";
 import paymentsRouter from "./payments.js";
+import payementsRouter from "./payements.js";
 import walletRouter from "./wallet.js";
 
 import providersRouter from "./providers.js";
 import providersMissionsRouter from "./providers.missions.js";
 import providersRankedRouter from "./providers.ranked.js";
 import providersTopRouter from "./providers.top.js";
+
+import clientDashboardRouter from "./client.dashboard.js";
 
 import requestsActionsRouter from "./requests.actions.js";
 import requestsCreateRouter from "./requests.create.js";
@@ -30,6 +33,7 @@ import messagesRouter from "./messages.js";
 import ratingsRouter from "./ratings.js";
 import uploadsRouter from "./uploads.js";
 
+
 import adminRouter from "./admin.js"; // 👈 carrefour principal admin
 import adminUsersRouter from "./admin.user.js"; // 👈 CRUD & détail user
 import adminProvidersRouter from "./admin.providers.js"; // 👈 gestion provider
@@ -39,6 +43,14 @@ import catalogRouter from "./catalog.js"; // 👈 catalogue admin (vue users)
 const router = express.Router({
   caseSensitive: false,
   strict: false,
+});
+
+// Attache io depuis app.locals pour le rendre disponible à toutes les sous-routes
+router.use((req, _res, next) => {
+  if (!req.io && req.app?.locals?.io) {
+    req.io = req.app.locals.io;
+  }
+  next();
 });
 
 // ─── Debug helper (pour détecter un export foireux) ───────
@@ -70,6 +82,7 @@ safeUse("/me", meRouter);
 safeUse("/users", usersRouter);
 safeUse("/roles", rolesRouter);
 safeUse("/permissions", permissionsRouter);
+safeUse("/client", clientDashboardRouter);
 
 // Stats & Export
 safeUse("/stats", statsRouter);
@@ -79,13 +92,17 @@ safeUse("/export", exportRouter);
 safeUse("/contracts", contractsRouter);
 safeUse("/subscription", subscriptionRouter);
 safeUse("/payments", paymentsRouter);
+// French alias for payments
+safeUse("/payements", payementsRouter);
 safeUse("/wallet", walletRouter);
 
-// Providers
-safeUse("/providers", providersRouter);
+
+// Providers (mount specific routes before the generic "/providers")
 safeUse("/providers/missions", providersMissionsRouter);
 safeUse("/providers/ranked", providersRankedRouter);
 safeUse("/providers/top", providersTopRouter);
+safeUse("/providers", providersRouter);
+
 
 // Requests
 safeUse("/requests/actions", requestsActionsRouter);

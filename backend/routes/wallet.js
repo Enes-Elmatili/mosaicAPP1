@@ -8,6 +8,7 @@ import {
   credit,
   debit,
 } from "../services/walletService.js";
+import { prisma } from "../db/prisma.js";
 
 const router = Router();
 
@@ -93,3 +94,64 @@ router.post(
 );
 
 export default router;
+
+// POST /api/wallet/withdraw { amount, method?, destination?, note? }
+// CLIENT/PROVIDER: demande de retrait → on débite le wallet immédiatement (MVP)
+router.post(
+  "/withdraw",
+  authenticateFlexible,
+  requireRole("CLIENT", "PROVIDER"),
+  async (req, res, next) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "User not authenticated" });
+
+      const { amount, method, destination, note } = req.body || {};
+      const amt = Math.floor(Number(amount));
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return res.status(400).json({ error: "Montant invalide" });
+      }
+
+      // Vérifie solde suffisant sans débiter (MVP approbation)
+      const balance = await getBalance(userId);
+      if (amt > balance) {
+        return res.status(400).json({ error: "Solde insuffisant" });
+      }
+
+      const wr = await prisma.withdrawRequest.create({
+        data: {
+          userId,
+          amount: amt,
+          method,
+          destination,
+          note,
+          status: "PENDING",
+        },
+      });
+      return res.status(201).json({ code: "WITHDRAW_REQUESTED", data: wr });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+// Liste des retraits de l'utilisateur connecté
+router.get(
+  "/withdraws",
+  authenticateFlexible,
+  requireRole("CLIENT", "PROVIDER", "ADMIN"),
+  async (req, res, next) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "User not authenticated" });
+      const items = await prisma.withdrawRequest.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      });
+      res.json({ data: items });
+    } catch (e) {
+      next(e);
+    }
+  }
+);

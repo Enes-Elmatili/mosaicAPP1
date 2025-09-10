@@ -1,3 +1,6 @@
+// For more info, see https://github.com/storybookjs/eslint-plugin-storybook#configuration-flat-config-format
+import storybook from "eslint-plugin-storybook";
+
 // ESLint v9+ flat config
 import js from '@eslint/js'
 import globals from 'globals'
@@ -33,10 +36,8 @@ export default [
       '**/*.map'
     ]
   },
-
   // Base JS recommended
   js.configs.recommended,
-
   // Règles pour l'app (front/back) + tests
   {
     files: [
@@ -83,7 +84,6 @@ export default [
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }]
     }
   },
-
   // (Optionnel) Overrides backend pur JS si besoin
   {
     files: ['backend/**/*.js'],
@@ -92,5 +92,6 @@ export default [
       globals: globals.node
     },
     rules: {}
-  }
-]
+  },
+  ...storybook.configs["flat/recommended"]
+];

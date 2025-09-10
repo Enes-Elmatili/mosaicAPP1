@@ -54,6 +54,54 @@ const StatusBody = z.object({
 });
 
 // ───────────────────────────────────────────────
+// GET /api/providers/me → provider by current user
+// ───────────────────────────────────────────────
+router.get("/me", authenticateFlexible, requireRole("PROVIDER"), async (req, res) => {
+  try {
+    const provider = await prisma.provider.findFirst({ where: { userId: req.user.id } });
+    if (!provider) return res.status(404).json({ error: "Provider not found" });
+    res.json({ success: true, provider });
+  } catch (err) {
+    console.error("[GET /api/providers/me]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ───────────────────────────────────────────────
+// GET /api/providers/earnings → this month + wallet balance
+// ───────────────────────────────────────────────
+router.get("/earnings", authenticateFlexible, requireRole("PROVIDER"), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const provider = await prisma.provider.findFirst({ where: { userId }, select: { id: true, avgRating: true } });
+    if (!provider) return res.status(404).json({ error: "Provider not found" });
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const monthPayments = await prisma.payment.findMany({
+      where: { providerId: provider.id, status: "completed", createdAt: { gte: startOfMonth } },
+      select: { amount: true, currency: true },
+    });
+    const monthTotal = monthPayments.reduce((s, p) => s + (p.amount || 0), 0);
+    const currency = monthPayments[0]?.currency || "MAD";
+
+    const wallet = await prisma.walletAccount.findUnique({ where: { userId }, select: { balance: true } });
+
+    res.json({
+      success: true,
+      earnings: { monthTotal, currency },
+      wallet: { balance: wallet?.balance || 0 },
+      rating: { avgRating: provider.avgRating || 0 },
+    });
+  } catch (err) {
+    console.error("[GET /api/providers/earnings]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ───────────────────────────────────────────────
 // GET /api/providers → liste paginée et filtrée
 // ───────────────────────────────────────────────
 router.get("/", validateQuery(QueryList), async (req, res) => {
@@ -152,17 +200,20 @@ router.patch(
   validateBody(StatusBody.extend({ lat: z.number().optional(), lng: z.number().optional() })),
   async (req, res) => {
     try {
-      const providerId = req.user?.id;
-      if (!providerId) return res.status(401).json({ error: "Unauthorized" });
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const providerRow = await prisma.provider.findFirst({ where: { userId }, select: { id: true } })
+      if (!providerRow) return res.status(404).json({ error: "Provider not found" });
 
       const provider = await prisma.provider.update({
-        where: { id: providerId },
+        where: { id: providerRow.id },
         data: { ...req.body, lastActiveAt: new Date() },
       });
 
       invalidateProvidersCache();
       req.io?.emit("provider-status-changed", {
-        id: providerId,
+        id: providerRow.id,
         status: provider.status,
         lat: provider.lat,
         lng: provider.lng,

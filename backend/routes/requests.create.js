@@ -62,7 +62,7 @@ router.post("/", authenticateFlexible, validateBody(Body), async (req, res, next
     // 🔔 Envoi aux providers en temps réel
     let assignedProviders = [];
     try {
-      assignedProviders = await matchRequestToProviders(request);
+      assignedProviders = await matchRequestToProviders(request.id);
     } catch (err) {
       console.error("[matchRequestToProviders] failed:", err);
     }

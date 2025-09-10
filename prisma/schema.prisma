@@ -28,6 +28,12 @@ enum WalletTxType {
   RELEASE
 }
 
+enum WithdrawStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum RequestStatus {
   PUBLISHED  // créée par le client
   ACCEPTED   // acceptée par un provider
@@ -98,6 +104,8 @@ model User {
   contracts      Contract[]     @relation("UserContracts")
   invoices       Invoice[]      @relation("UserInvoices")
   AdminActionLog AdminActionLog[]
+  // Withdraw requests initiated by the user
+  withdrawRequests WithdrawRequest[]
 }
 
 /**
@@ -297,6 +305,16 @@ model Alert {
   request MaintenanceRequest @relation(fields: [requestId], references: [id])
 }
 
+model Activity {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  date        DateTime @default(now())
+  userId      String?  // si tu veux lier à un user (optionnel)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 /**
  * ============ REVIEWS ============
  */
@@ -430,6 +448,29 @@ model WalletTransaction {
   createdAt     DateTime     @default(now())
 
   account WalletAccount @relation(fields: [accountId], references: [id])
+  // Back-reference to a withdraw request (when type is DEBIT for withdrawal)
+  withdrawRequest WithdrawRequest? @relation("WithdrawTx")
 
   @@index([accountId, createdAt])
+}
+
+model WithdrawRequest {
+  id            String          @id @default(cuid())
+  userId        String
+  amount        Int
+  method        String?
+  destination   String?
+  note          String?
+  status        WithdrawStatus  @default(PENDING)
+  approvedAt    DateTime?
+  approvedById  String?
+  processedAt   DateTime?
+  txId          String? @unique
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  user          User               @relation(fields: [userId], references: [id])
+  tx            WalletTransaction? @relation("WithdrawTx", fields: [txId], references: [id])
+
+  @@index([userId, createdAt])
 }

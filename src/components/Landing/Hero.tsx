@@ -1,59 +1,44 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import * as React from "react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/Button";
 
-/**
- * Hero section for the premium landing page.
- */
-const Hero: React.FC = () => (
-  <section className="relative bg-gradient-to-r from-primary-500 to-accent-500 text-white">
-    {/* Top notice */}
-    <div className="bg-white bg-opacity-20 text-center text-sm py-2">
-      Nouveau : option de protection des loyers <strong>Himaya</strong> désormais disponible.
-    </div>
-    <div className="container mx-auto px-6 py-16 flex flex-col-reverse lg:flex-row items-center gap-12">
-      <div className="w-full lg:w-1/2 space-y-6">
-        <h1 className="text-4xl md:text-5xl font-semibold">
-          La gestion locative premium, clé en main.
-        </h1>
-        <p className="text-lg md:text-xl max-w-prose">
-          Plateforme élégante + équipe terrain pour propriétaires exigeants. Encaissement des loyers, interventions, documents et reporting — tout au même endroit.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4">
-          <Link
-            to="#"
-            className="bg-white text-primary-600 font-medium py-3 px-6 rounded shadow hover:shadow-lg transition duration-200"
-          >
-            Essayer gratuitement
-          </Link>
-          <Link
-            to="#"
-            className="border border-white font-medium py-3 px-6 rounded hover:bg-white hover:bg-opacity-20 transition duration-200"
-          >
-            Parler à un expert
-          </Link>
-        </div>
-        <p className="text-sm opacity-90">Sans engagement. Mise en place en quelques minutes.</p>
-        <div className="flex flex-wrap gap-2 text-sm opacity-90">
-          <span className="px-3 py-1 bg-white bg-opacity-30 rounded-full">
-            Suivi des loyers en temps réel
-          </span>
-          <span className="px-3 py-1 bg-white bg-opacity-30 rounded-full">
-            Tickets & interventions avec photos
-          </span>
-          <span className="px-3 py-1 bg-white bg-opacity-30 rounded-full">
-            Tableau de bord propriétaire
-          </span>
-        </div>
-      </div>
-      <div className="w-full lg:w-1/2 flex justify-center">
-        <img
-          src="/hero-image.png"
-          alt="Aperçu de l’application de gestion locative : loyers, interventions et documents visibles sur un tableau de bord."
-          className="w-full max-w-md rounded-lg shadow-lg"
-        />
-      </div>
-    </div>
-  </section>
-);
+export const Hero: React.FC = () => {
+  return (
+    <section className="relative overflow-hidden bg-gradient-to-br from-primary via-secondary-purple to-secondary-pink text-white">
+      <div className="container mx-auto px-6 py-20 text-center">
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="text-4xl sm:text-6xl font-bold tracking-tight"
+        >
+          Simplifiez la gestion de vos biens <br /> avec MOSAÏC
+        </motion.h1>
 
-export default Hero;
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.6 }}
+          className="mt-6 text-lg sm:text-xl text-neutral-100/80 max-w-2xl mx-auto"
+        >
+          Une plateforme premium inspirée par Uber & Revolut, pour gérer vos
+          propriétés et vos services en toute simplicité.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="mt-10 flex justify-center gap-4"
+        >
+          <Button variant="primary" size="lg">
+            Commencer
+          </Button>
+          <Button variant="secondary" size="lg">
+            En savoir plus
+          </Button>
+        </motion.div>
+      </div>
+    </section>
+  );
+};

@@ -3,36 +3,37 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["@testing-library/jest-dom"],
 
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
 
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] },
+    "baseUrl": ".", 
+    "paths": {
+      "@/*": ["src/*"],
+      "@backend/*": ["backend/*"]
+    },
 
     "typeRoots": ["./src/types", "./node_modules/@types"],
-
     "allowJs": false,
     "checkJs": false,
-    "noEmit": true,
-
-    "jsx": "react-jsx",
-
+    "noEmit": true
   },
-  "include": ["src", "tests", "src/types"],
+  "include": ["src", "backend", "tests", "src/types"],
   "exclude": [
     "node_modules",
     "dist",
     "dist-backend",
     "build",
     "coverage",
-    "backend",          // ⬅️ très important: on sort le backend du projet racine
     "playwright-report",
     ".playwright",
     ".vite",
     ".cypress",
-    ".venv"
+    ".venv",
+    "_archive"
   ]
 }

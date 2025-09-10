@@ -11,13 +11,13 @@ const router = Router();
 // ───────────────────────────────────────────────
 // Schémas Zod
 // ───────────────────────────────────────────────
-const IdParam = z.object({ id: z.string().uuid() });
+const IdParam = z.object({ id: z.string().regex(/^\d+$/).transform(Number) });
 const StatusBody = z.object({
   status: z.enum(["PENDING", "ACCEPTED", "DONE", "CANCELLED"]),
 });
 const QueryPagination = z.object({
-  page: z.string().regex(/^\d+$/).transform(Number).optional(),
-  limit: z.string().regex(/^\d+$/).transform(Number).optional(),
+  page: z.coerce.number().optional(),
+  limit: z.coerce.number().optional(),
 });
 
 // ───────────────────────────────────────────────
@@ -34,15 +34,36 @@ router.get(
       const limit = Math.min(req.query.limit ?? 20, 100);
       const skip = (page - 1) * limit;
 
-      const [missions, total] = await Promise.all([
-        prisma.mission.findMany({
-          where: { providerId: req.user.id },
+      const available = String(req.query.available) === 'true';
+
+      // Resolve provider id from user
+      const provider = await prisma.provider.findFirst({ where: { userId: req.user.id }, select: { id: true } });
+      if (!provider && !available) {
+        return res.json({ success: true, page, limit, total: 0, missions: [] });
+      }
+
+      const where = available
+        ? { status: "PUBLISHED" }
+        : { provider: { userId: req.user.id } };
+
+      const [requests, total] = await Promise.all([
+        prisma.request.findMany({
+          where,
           orderBy: { createdAt: "desc" },
           skip,
           take: limit,
+          select: { id: true, description: true, status: true, createdAt: true },
         }),
-        prisma.mission.count({ where: { providerId: req.user.id } }),
+        prisma.request.count({ where }),
       ]);
+
+      const missions = requests.map((r) => ({
+        id: String(r.id),
+        title: undefined,
+        description: r.description,
+        status: r.status,
+        createdAt: r.createdAt,
+      }));
 
       res.json({ success: true, page, limit, total, missions });
     } catch (e) {
@@ -104,43 +125,29 @@ router.post(
   validateParams(IdParam),
   async (req, res, next) => {
     try {
-      const { id } = req.params;
-      const providerId = req.user.id;
+      const id = Number(req.params.id);
+      const provider = await prisma.provider.findFirst({ where: { userId: req.user.id }, select: { id: true } });
+      if (!provider) return res.status(404).json({ error: "Provider not found" });
 
       const result = await prisma.$transaction(async (tx) => {
-        const mission = await tx.mission.findUnique({
-          where: { id },
-          select: { id: true, providerId: true, status: true },
-        });
+        const r = await tx.request.findUnique({ where: { id }, select: { id: true, providerId: true, status: true } });
+        if (!r) throw new Error("NOT_FOUND");
+        if (r.status !== "PUBLISHED") throw new Error("ALREADY_TAKEN");
 
-        if (!mission) throw new Error("NOT_FOUND");
-        if (mission.status !== "PENDING") throw new Error("ALREADY_TAKEN");
-        if (mission.providerId && mission.providerId !== providerId) {
-          throw new Error("CONFLICT");
-        }
-
-        return tx.mission.update({
+        return tx.request.update({
           where: { id },
-          data: { providerId, status: "ACCEPTED" },
+          data: { providerId: provider.id, status: "ACCEPTED" },
         });
       });
 
-      req.io?.to(providerId).emit("mission-accepted", {
-        missionId: result.id,
-        status: result.status,
-      });
+      req.io?.to(req.user.id).emit("mission-accepted", { missionId: result.id, status: result.status });
+      req.io?.to(req.user.id).emit("mission:accepted", { missionId: result.id, status: result.status });
 
       res.json({ success: true, mission: result });
     } catch (e) {
       console.error("[POST /api/providers/missions/:id/accept]", e);
-
-      if (e.message === "NOT_FOUND") {
-        return res.status(404).json({ error: "Mission not found" });
-      }
-      if (["ALREADY_TAKEN", "CONFLICT"].includes(e.message)) {
-        return res.status(409).json({ error: "Mission already accepted" });
-      }
-
+      if (e.message === "NOT_FOUND") return res.status(404).json({ error: "Mission not found" });
+      if (["ALREADY_TAKEN", "CONFLICT"].includes(e.message)) return res.status(409).json({ error: "Mission already accepted" });
       next(e);
     }
   }
@@ -156,31 +163,19 @@ router.post(
   validateParams(IdParam),
   async (req, res, next) => {
     try {
-      const { id } = req.params;
-      const providerId = req.user.id;
+      const id = Number(req.params.id);
+      const provider = await prisma.provider.findFirst({ where: { userId: req.user.id }, select: { id: true } });
+      if (!provider) return res.status(404).json({ error: "Provider not found" });
 
-      const mission = await prisma.mission.findUnique({
-        where: { id },
-        select: { id: true, providerId: true, status: true },
-      });
-
+      const mission = await prisma.request.findUnique({ where: { id }, select: { id: true, providerId: true, status: true } });
       if (!mission) return res.status(404).json({ error: "Mission not found" });
-      if (mission.providerId !== providerId) {
-        return res.status(403).json({ error: "Forbidden: not your mission" });
-      }
-      if (mission.status === "DONE") {
-        return res.status(400).json({ error: "Mission already completed" });
-      }
+      if (mission.providerId !== provider.id) return res.status(403).json({ error: "Forbidden: not your mission" });
+      if (mission.status === "DONE") return res.status(400).json({ error: "Mission already completed" });
 
-      const updated = await prisma.mission.update({
-        where: { id },
-        data: { status: "DONE" },
-      });
+      const updated = await prisma.request.update({ where: { id }, data: { status: "DONE" } });
 
-      req.io?.to(providerId).emit("mission-done", {
-        missionId: updated.id,
-        status: updated.status,
-      });
+      req.io?.to(req.user.id).emit("mission-done", { missionId: updated.id, status: updated.status });
+      req.io?.to(req.user.id).emit("mission:done", { missionId: updated.id, status: updated.status });
 
       res.json({ success: true, mission: updated });
     } catch (e) {
@@ -200,13 +195,10 @@ router.post(
   validateParams(IdParam),
   async (req, res, next) => {
     try {
-      const { id } = req.params;
+      const id = Number(req.params.id);
       const user = req.user;
 
-      const mission = await prisma.mission.findUnique({
-        where: { id },
-        select: { id: true, providerId: true, status: true },
-      });
+      const mission = await prisma.request.findUnique({ where: { id }, select: { id: true, providerId: true, status: true } });
 
       if (!mission) return res.status(404).json({ error: "Mission not found" });
       if (mission.status === "DONE") {
@@ -214,14 +206,14 @@ router.post(
       }
 
       // Vérif rôles
-      if (user.role === "PROVIDER" && mission.providerId !== user.id) {
-        return res.status(403).json({ error: "Forbidden: not your mission" });
+      if ((user.roles || []).includes("PROVIDER")) {
+        const provider = await prisma.provider.findFirst({ where: { userId: user.id }, select: { id: true } });
+        if (provider && mission.providerId !== provider.id) {
+          return res.status(403).json({ error: "Forbidden: not your mission" });
+        }
       }
 
-      const updated = await prisma.mission.update({
-        where: { id },
-        data: { status: "CANCELLED" },
-      });
+      const updated = await prisma.request.update({ where: { id }, data: { status: "CANCELLED" } });
 
       req.io?.emit("mission-cancelled", {
         missionId: updated.id,

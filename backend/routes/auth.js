@@ -3,6 +3,7 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { prisma } from "../db/prisma.js";
+import { z } from "zod"; // ✅ pour validation email
 
 const ALLOWED_ROLES = new Set(["PROVIDER", "ADMIN", "CLIENT"]);
 const router = Router();
@@ -26,7 +27,6 @@ function signAndSetCookie(res, payload) {
 
 /**
  * GET /api/auth/me
- * Retourne l’utilisateur courant
  */
 router.get("/me", async (req, res) => {
   try {
@@ -185,7 +185,6 @@ router.post("/logout", (_req, res) => {
 
 /**
  * POST /api/auth/refresh
- * Rafraîchir le JWT existant
  */
 router.post("/refresh", async (req, res) => {
   try {
@@ -207,5 +206,31 @@ router.post("/refresh", async (req, res) => {
   }
 });
 
+/**
+ * POST /api/auth/check-email
+ */
+router.post("/check-email", async (req, res, next) => {
+  try {
+    const schema = z.string().email("Email invalide");
+    const parsed = schema.safeParse(req.body?.email);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        code: "INVALID_EMAIL",
+        message: parsed.error.issues[0].message,
+      });
+    }
+
+    const email = parsed.data;
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    res.json({ exists: !!user });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
-// backend/routes/auth.js

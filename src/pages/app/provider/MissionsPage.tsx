@@ -1,183 +1,120 @@
-import React, { useState } from 'react';
-import {
-  Wrench,
-  Clock,
-  MapPin,
-  CalendarClock,
-  Phone,
-  CheckCircle2,
-  Camera,
-  FileUp,
-} from 'lucide-react';
-import PageWrapper from '../../../components/Layout/PageWrapper';
+"use client"
 
-// Types locaux (ou importe-les si tu les as déjà centralisés)
-type JobStatus = 'NEW' | 'ACCEPTED' | 'ON_ROUTE' | 'IN_PROGRESS' | 'DONE' | 'CANCELED';
+import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
+import { apiClient } from "@/api/apiClient"
+import { Section, Button, Badge, Table } from "@/components/ui"
 
-const chip = (s: JobStatus) => {
-  const base =
-    'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium';
-  const map: Record<JobStatus, string> = {
-    NEW: 'bg-amber-50 text-amber-700 border-amber-100',
-    ACCEPTED: 'bg-blue-50 text-blue-700 border-blue-100',
-    ON_ROUTE: 'bg-indigo-50 text-indigo-700 border-indigo-100',
-    IN_PROGRESS: 'bg-purple-50 text-purple-700 border-purple-100',
-    DONE: 'bg-green-50 text-green-700 border-green-100',
-    CANCELED: 'bg-gray-50 text-gray-700 border-gray-100',
-  };
-  return `${base} ${map[s]}`;
-};
+type Mission = {
+  id: string
+  title?: string | null
+  description?: string | null
+  status: "PENDING" | "ACCEPTED" | "DONE" | "CANCELLED"
+  createdAt: string
+  address?: string | null
+  amount?: number | null
+  rating?: number | null
+}
+type LocalMission = Mission & { actions?: null }
 
-const card =
-  'rounded-3xl border border-white/20 bg-white/60 backdrop-blur-md shadow-lg';
+export default function MissionsPage(): JSX.Element {
+  const [query, setQuery] = React.useState<string>("")
+  const [status, setStatus] = React.useState<"ALL" | "DONE" | "ACCEPTED" | "CANCELLED">("ALL")
 
-// —— MOCK mission (remplace par tes données / param route) ——
-const initialStatus: JobStatus = 'ACCEPTED';
-const mission = {
-  id: 'JOB-2412',
-  title: 'Prise électrique — court-circuit',
-  address: '18 Bd Anfa, Casablanca',
-  window: "Aujourd'hui 13:00–15:00",
-  createdAt: new Date().toISOString(),
-  phone: '+212 6 98 76 54 32',
-  fee: 280,
-};
+  const { data, isLoading } = useQuery<{ missions: Mission[] }>({
+    queryKey: ["provider", "missions", "all"],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ success: boolean; missions: Mission[] }>("/api/providers/missions")
+      // Keep shape minimal; we will filter client-side
+      return { missions: data.missions }
+    },
+  })
 
-const MissionDetailPage: React.FC = () => {
-  const [status, setStatus] = useState<JobStatus>(initialStatus);
-  const [note, setNote] = useState('');
+  const missions: LocalMission[] = React.useMemo(() => {
+    const list = (data?.missions || []).filter((m) => (status === "ALL" ? true : m.status === status)) as LocalMission[]
+    const q = query.trim().toLowerCase()
+    return q
+      ? list.filter((m) =>
+          [m.id, m.title, m.description, m.address]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q))
+        )
+      : list
+  }, [data, query, status])
 
-  const next = (to: JobStatus) => setStatus(to);
+  function exportInvoice(id: string) {
+    // S'il existe un endpoint d'export déjà prêt côté backend, ouvrez-le
+    // Exemple: /api/admin/invoices/:id/pdf ou une route dédiée comme /api/requests/:id/invoice
+    // Ici on tente d'ouvrir une route prévisible; adaptez si besoin.
+    const candidates = [
+      `/api/admin/invoices/${encodeURIComponent(id)}/pdf`,
+      `/api/requests/${encodeURIComponent(id)}/invoice`,
+    ]
+    const url = candidates[0]
+    window.open(url, "_blank")
+  }
 
   return (
-    <PageWrapper title={`Mission ${mission.id}`}>
-      {/* En-tête : titre + statut + actions rapides */}
-      <div className={`${card} p-6 mb-6`}>
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight text-gray-900">
-              <span className="inline-flex items-center gap-2">
-                <Wrench className="h-5 w-5 text-gray-700" />
-                {mission.title}
-              </span>
-            </h2>
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-700">
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="h-4 w-4 text-gray-500" /> {mission.address}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <CalendarClock className="h-4 w-4 text-gray-500" /> {mission.window}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-4 w-4 text-gray-500" /> Créée le{' '}
-                {new Date(mission.createdAt).toLocaleString()}
-              </span>
+    <div className="space-y-8">
+      <Section title="Missions">
+        <div className="rounded-2xl border bg-white dark:bg-neutral-900 shadow p-4 space-y-4">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Rechercher par ID, type, adresse…"
+              className="w-full sm:w-80 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900"
+            />
+            <div className="flex items-center gap-2">
+              {(["ALL", "DONE", "ACCEPTED", "CANCELLED"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatus(s)}
+                  className={`px-3 py-1.5 rounded-full text-sm transition ${
+                    status === s
+                      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                      : "bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                  }`}
+                  aria-pressed={status === s}
+                >
+                  {s === "ALL" ? "Toutes" : s}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className={chip(status)}>
-              {status === 'NEW'
-                ? 'À traiter'
-                : status === 'ACCEPTED'
-                ? 'Acceptée'
-                : status === 'ON_ROUTE'
-                ? 'En route'
-                : status === 'IN_PROGRESS'
-                ? 'En cours'
-                : status === 'DONE'
-                ? 'Terminée'
-                : 'Annulée'}
-            </span>
-            <a
-              href={`tel:${mission.phone}`}
-              className="rounded-full border border-gray-200 bg-white/70 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-white"
-            >
-              <Phone className="mr-1 inline h-4 w-4" />
-              Appeler
-            </a>
-          </div>
+          {/* Table */}
+          <Table<LocalMission>
+            loading={isLoading}
+            data={missions}
+            columns={[
+              { key: "id", label: "ID" },
+              { key: "title", label: "Type", render: (_, row) => row.title || row.description || "—" },
+              { key: "address", label: "Adresse", render: (v) => v || "—" },
+              { key: "amount", label: "Montant", render: (v) => (v != null ? `${v} MAD` : "—") },
+              { key: "rating", label: "Note", render: (v) => (v != null ? (
+                <span className="inline-flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800 rounded-full px-2 py-0.5 text-xs">⭐ {v.toFixed(1)}</span>
+              ) : "—") },
+              { key: "status", label: "Statut", render: (v: Mission["status"]) => (
+                <Badge
+                  className="rounded-full"
+                  variant={v === "DONE" ? "neutral" : v === "ACCEPTED" ? "warning" : v === "CANCELLED" ? "error" : "primary"}
+                >
+                  {v}
+                </Badge>
+              ) },
+              { key: "createdAt", label: "Créé le", render: (v) => new Date(v).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) },
+              { key: "actions" as keyof LocalMission, label: "Facture", render: (_, row) => (
+                <Button variant="outline" className="px-3 py-1 rounded-full text-xs" onClick={() => exportInvoice(String(row.id))}>
+                  Exporter
+                </Button>
+              ) },
+            ]}
+          />
         </div>
-      </div>
-
-      {/* Actions de workflow */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <div className={`${card} p-5 md:col-span-2`}>
-          <h3 className="mb-3 text-lg font-semibold text-gray-900">
-            Progression
-          </h3>
-          <div className="flex flex-wrap items-center gap-2">
-            {status === 'ACCEPTED' && (
-              <button
-                onClick={() => next('ON_ROUTE')}
-                className="rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black/90"
-              >
-                Je pars sur place
-              </button>
-            )}
-            {status === 'ON_ROUTE' && (
-              <button
-                onClick={() => next('IN_PROGRESS')}
-                className="rounded-full bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black/90"
-              >
-                Démarrer l’intervention
-              </button>
-            )}
-            {status === 'IN_PROGRESS' && (
-              <button
-                onClick={() => next('DONE')}
-                className="rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
-              >
-                <CheckCircle2 className="mr-1 inline h-4 w-4" />
-                Terminer
-              </button>
-            )}
-            {status !== 'DONE' && status !== 'CANCELED' && (
-              <a
-                href={`https://maps.google.com/?q=${encodeURIComponent(mission.address)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-full border border-gray-200 bg-white/70 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-white"
-              >
-                Itinéraire
-              </a>
-            )}
-          </div>
-
-          {/* Notes / compte rendu */}
-          <div className="mt-5">
-            <label className="mb-1 block text-sm font-medium text-gray-900">
-              Compte rendu / Remarques
-            </label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={5}
-              placeholder="Décris ce qui a été fait, les pièces utilisées, etc."
-              className="w-full rounded-2xl border border-gray-200 bg-white/70 px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300"
-            />
-          </div>
-        </div>
-
-        {/* Fichiers & pièces jointes */}
-        <div className={`${card} p-5`}>
-          <h3 className="mb-3 text-lg font-semibold text-gray-900">Pièces jointes</h3>
-          <div className="flex flex-wrap gap-2">
-            <button className="rounded-full border border-gray-200 bg-white/70 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-white">
-              <Camera className="mr-1 inline h-4 w-4" /> Photos avant/après
-            </button>
-            <button className="rounded-full border border-gray-200 bg-white/70 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-white">
-              <FileUp className="mr-1 inline h-4 w-4" /> Devis / Facture
-            </button>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50/70 p-3 text-xs text-gray-600">
-            Formats acceptés : JPG, PNG, PDF. Taille max 10 Mo.
-          </div>
-        </div>
-      </div>
-    </PageWrapper>
-  );
-};
-
-export default MissionDetailPage;
+      </Section>
+    </div>
+  )
+}

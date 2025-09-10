@@ -1,6 +1,6 @@
 import React from 'react';
 import { Bell, CheckCircle, AlertCircle, Info, Trash2 } from 'lucide-react';
-import PageWrapper from '../../components/Layout/PageWrapper';
+import PageWrapper from '../../components/layouts/PageWrapper';
 
 const notifications = [
   {

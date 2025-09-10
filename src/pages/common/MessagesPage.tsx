@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Filter, MoreVertical, Send, Paperclip, Phone, Video, Check, Clock, UserRound } from 'lucide-react';
-import PageWrapper from '../../components/Layout/PageWrapper';
+import PageWrapper from '../../components/layouts/PageWrapper';
 
 // Types
 type Message = {

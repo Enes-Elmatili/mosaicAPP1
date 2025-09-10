@@ -6,6 +6,7 @@ import authenticateFlexible from "../middleware/authenticateFlexible.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { z } from "zod";
 import { validateBody, validateParams, validateQuery } from "../middleware/validate.js";
+import { debit } from "../services/walletService.js";
 
 const router = Router();
 
@@ -38,6 +39,16 @@ const SubscriptionCreateSchema = z.object({
   currency: z.string().default("MAD"),
   status: z.enum(["ACTIVE", "CANCELLED"]).default("ACTIVE"),
 });
+
+// ───────────────────────────────────────────────
+// Withdraws (approbation)
+// ───────────────────────────────────────────────
+const WithdrawQuery = z.object({
+  page: z.string().regex(/^\d+$/).transform(Number).optional(),
+  limit: z.string().regex(/^\d+$/).transform(Number).optional(),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
+});
+const WithdrawIdParam = z.object({ id: z.string().cuid() });
 
 // ───────────────────────────────────────────────
 // 🔐 Auth global : souple en DEV, strict en PROD
@@ -265,6 +276,97 @@ router.get("/files", async (req, res, next) => {
     res.json({ success: true, data: files });
   } catch (err) {
     console.error("[GET /admin/files]", err);
+    next(err);
+  }
+});
+
+// ───────────────────────────────────────────────
+// Withdraws list
+// ───────────────────────────────────────────────
+router.get("/withdraws", validateQuery(WithdrawQuery), async (req, res, next) => {
+  try {
+    const page = req.query.page ?? 1;
+    const limit = Math.min(req.query.limit ?? 20, 100);
+    const skip = (page - 1) * limit;
+    const where = req.query.status ? { status: req.query.status } : {};
+
+    const [items, total] = await Promise.all([
+      prisma.withdrawRequest.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: { user: { select: { id: true, email: true, name: true } } },
+      }),
+      prisma.withdrawRequest.count({ where }),
+    ]);
+
+    res.json({ success: true, page, limit, total, data: items });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ───────────────────────────────────────────────
+// Withdraw approve
+// ───────────────────────────────────────────────
+router.patch("/withdraws/:id/approve", validateParams(WithdrawIdParam), async (req, res, next) => {
+  try {
+    const adminId = req.user?.id;
+    const wr = await prisma.withdrawRequest.findUnique({ where: { id: req.params.id } });
+    if (!wr) return res.status(404).json({ error: "Withdraw not found" });
+    if (wr.status !== "PENDING") {
+      return res.status(400).json({ error: "Withdraw not in PENDING state" });
+    }
+
+    // Débit + mise à jour (transaction)
+    const result = await prisma.$transaction(async (tx) => {
+      // contrôler le solde
+      const wallet = await tx.walletAccount.findUnique({ where: { userId: wr.userId }, select: { id: true, balance: true } });
+      if (!wallet || wallet.balance < wr.amount) {
+        throw new Error("Solde insuffisant");
+      }
+      const updatedWallet = await tx.walletAccount.update({ where: { id: wallet.id }, data: { balance: { decrement: wr.amount } } });
+      const txRow = await tx.walletTransaction.create({
+        data: {
+          accountId: wallet.id,
+          type: "DEBIT",
+          amount: wr.amount,
+          reference: `WITHDRAW_APPROVED:${wr.method || "manual"}`,
+          balanceBefore: wallet.balance,
+          balanceAfter: updatedWallet.balance,
+        },
+      });
+      const updatedWr = await tx.withdrawRequest.update({
+        where: { id: wr.id },
+        data: { status: "APPROVED", approvedAt: new Date(), approvedById: adminId || undefined, processedAt: new Date(), txId: txRow.id },
+      });
+      return { tx: txRow, wr: updatedWr };
+    });
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ───────────────────────────────────────────────
+// Withdraw reject
+// ───────────────────────────────────────────────
+router.patch("/withdraws/:id/reject", validateParams(WithdrawIdParam), async (req, res, next) => {
+  try {
+    const adminId = req.user?.id;
+    const wr = await prisma.withdrawRequest.findUnique({ where: { id: req.params.id } });
+    if (!wr) return res.status(404).json({ error: "Withdraw not found" });
+    if (wr.status !== "PENDING") {
+      return res.status(400).json({ error: "Withdraw not in PENDING state" });
+    }
+    const updated = await prisma.withdrawRequest.update({
+      where: { id: wr.id },
+      data: { status: "REJECTED", approvedAt: new Date(), approvedById: adminId || undefined },
+    });
+    res.json({ success: true, data: updated });
+  } catch (err) {
     next(err);
   }
 });

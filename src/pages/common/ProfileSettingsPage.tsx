@@ -1,6 +1,6 @@
 import React from 'react';
 import { User, Lock, Bell, Globe, LogOut } from 'lucide-react';
-import PageWrapper from '../../components/Layout/PageWrapper';
+import PageWrapper from '../../components/layouts/PageWrapper';
 
 const ProfileSettingsPage: React.FC = () => {
   return (

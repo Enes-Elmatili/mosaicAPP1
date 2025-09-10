@@ -1,6 +1,6 @@
 import React from 'react';
 import { WifiOff, RefreshCw } from 'lucide-react';
-import PageWrapper from '../../components/Layout/PageWrapper';
+import PageWrapper from '../../components/layouts/PageWrapper';
 
 const OfflinePage: React.FC = () => {
   return (

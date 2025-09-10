@@ -59,7 +59,7 @@ export function authenticate(req, res, next) {
  * - Sinon → laisse passer (req.user = null)
  * - En DEV: autorise x-master-key pour bypass (pratique pour tests)
  */
-function authenticateFlexible(req, _res, next) {
+export function authenticateFlexible(req, _res, next) {
   const isProd = process.env.NODE_ENV === 'production';
   const master = process.env.MASTER_KEY || process.env.VITE_MASTER_KEY;
   const provided = req.header('x-master-key');
@@ -97,3 +97,7 @@ function authenticateFlexible(req, _res, next) {
   }
   return next();
 }
+
+// Backward compatibility aliases
+export const authenticateStrict = authenticate;
+export default authenticate;

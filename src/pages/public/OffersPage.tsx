@@ -1,5 +1,5 @@
 import React from 'react';
-import PageWrapper from '../../components/Layout/PageWrapper';
+import PageWrapper from '../../components/layouts/PageWrapper';
 import { Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 

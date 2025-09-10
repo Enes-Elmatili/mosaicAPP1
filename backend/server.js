@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import cors from "cors"; // ✅ ajout
 import app from "./app.js"; // 👈 on réutilise ton app configurée
 import prisma from "./db/prisma.js";
+import { providerSockets, attachIo } from "./sockets/index.js";
 
 dotenv.config();
 
@@ -46,8 +47,18 @@ const io = new Server(server, {
   },
 });
 
+// Expose this io instance to the sockets helper (so services can emit)
+attachIo(io);
+app.locals.io = io;
+
+// Attacher io sur chaque requête Express (pour req.io?.emit)
+app.use((req, _res, next) => {
+  req.io = io;
+  next();
+});
+
 // ────────────── SOCKET.IO ──────────────
-const providerSockets = new Map();
+// Utiliser la Map partagée exportée depuis sockets/index.js
 
 io.on("connection", (socket) => {
   console.log(`[SOCKET] ${socket.id} connected`);

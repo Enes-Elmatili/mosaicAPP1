@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Upload, Search, FileText, Download, Eye, Trash2, Filter } from 'lucide-react';
-import PageWrapper from '../../components/Layout/PageWrapper';
+import PageWrapper from '../../components/layouts/PageWrapper';
 
 // Type de document
 interface DocItem {
